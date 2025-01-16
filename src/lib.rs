@@ -8,7 +8,6 @@ use template::{Template, TemplatePart};
 
 const CLEAR_ANSI: &str = "\r\x1b[K";
 const UP_ANSI: &str = "\x1b[F";
-const DOWN_ANSI: &str = "\x1b[E";
 
 pub struct BarState {
     len: u64,
@@ -107,6 +106,7 @@ struct ManagerInner {
     refresh_interval: std::time::Duration,
     out: Mutex<Box<dyn Out>>,
     last_draw: Mutex<std::time::Instant>,
+    last_lines: AtomicUsize,
 }
 
 pub trait Out: std::io::Write + std::io::IsTerminal + Send + Sync {}
@@ -126,6 +126,7 @@ impl Manager {
                 refresh_interval,
                 out: Mutex::new(Box::new(std::io::stdout())),
                 last_draw: Mutex::new(std::time::Instant::now() - refresh_interval),
+                last_lines: AtomicUsize::new(0),
             }),
         }
     }
@@ -178,11 +179,29 @@ impl Manager {
 
         let states = self.inner.states.lock().unwrap();
         let mut out = self.inner.out.lock().unwrap();
+        let is_terminal = out.is_terminal();
+        if is_terminal {
+            if states.len() > 0 {
+                // Don't clean output when no bars are present
+                for _ in 0..self.inner.last_lines.load(std::sync::atomic::Ordering::Relaxed) {
+                    out.write_all(format!("{}{}", UP_ANSI, CLEAR_ANSI).as_bytes())
+                        .unwrap();
+                }
+            }
+        }
+        let mut newlines = 0;
         for state in states.values() {
             let state = state.lock().unwrap();
-            out.write_all(format!("{}\n", state.render()).as_bytes())
-                .unwrap();
+            let outstr = format!("{}\n", state.render());
+            if is_terminal {
+                newlines += outstr.chars().filter(|&c| c == '\n').count();
+            }
+            out.write_all(outstr.as_bytes()).unwrap();
         }
+        if is_terminal {
+            self.inner.last_lines.store(newlines, std::sync::atomic::Ordering::Relaxed);
+        }
+
         *last_draw = now;
     }
 }
@@ -210,8 +229,8 @@ mod tests {
     #[test]
     fn basic_test() {
         let manager = Manager::new(std::time::Duration::from_secs(1));
-        let bar_1 = manager.create_bar(100, "Downloading", "<placeholder>");
-        let bar_2 = manager.create_bar(100, "Uploading", "<placeholder>");
+        let bar_1 = manager.create_bar(100, "Downloading", "{msg}\n[{elapsed}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})");
+        let bar_2 = manager.create_bar(100, "Uploading", "{msg}\n[{elapsed}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})");
 
         bar_1.set_pos(50);
         bar_2.set_pos(25);

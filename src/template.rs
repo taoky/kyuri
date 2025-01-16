@@ -20,7 +20,6 @@ pub(crate) enum TemplatePart {
 #[derive(Debug)]
 pub(crate) struct Template {
     pub(crate) parts: Vec<TemplatePart>,
-    pub(crate) rows_count: usize,
 }
 
 impl Template {
@@ -115,15 +114,9 @@ impl Template {
                 },
             }
         }
-        let rows_count = results
-            .iter()
-            .filter(|x| matches!(x, TemplatePart::Newline))
-            .count()
-            + 1;
         
         Template {
             parts: results,
-            rows_count,
         }
     }
 }
