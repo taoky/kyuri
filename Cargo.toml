@@ -1,0 +1,8 @@
+[package]
+name = "kyuri"
+version = "0.1.0"
+edition = "2021"
+description = "A simple progress bar library for tsumugu and yukina."
+license = "MIT"
+
+[dependencies]
