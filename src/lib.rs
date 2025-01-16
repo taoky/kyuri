@@ -16,16 +16,16 @@ pub struct Bar {
     manager: Manager,
 }
 
-pub struct ManagerInner {
+struct ManagerInner {
     states: Mutex<HashMap<usize, Arc<Mutex<BarState>>>>,
     next_id: AtomicUsize,
     refresh_interval: std::time::Duration,
     out: Mutex<Box<dyn Out>>,
-    last_draw: std::time::Instant,
+    last_draw: Mutex<std::time::Instant>,
 }
 
-pub trait Out: std::io::Write + std::io::IsTerminal {}
-impl<T: std::io::Write + std::io::IsTerminal> Out for T {}
+pub trait Out: std::io::Write + std::io::IsTerminal + Send + Sync {}
+impl<T: std::io::Write + std::io::IsTerminal + Send + Sync> Out for T {}
 
 #[derive(Clone)]
 pub struct Manager {
@@ -33,16 +33,21 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn new(refresh_interval: std::time::Duration, out: Box<dyn Out>) -> Self {
+    pub fn new(refresh_interval: std::time::Duration) -> Self {
         Manager {
             inner: Arc::new(ManagerInner {
                 states: Mutex::new(HashMap::new()),
                 next_id: AtomicUsize::new(0),
                 refresh_interval,
-                out: Mutex::new(out),
-                last_draw: std::time::Instant::now() - refresh_interval,
+                out: Mutex::new(Box::new(std::io::stdout())),
+                last_draw: Mutex::new(std::time::Instant::now() - refresh_interval),
             }),
         }
+    }
+
+    pub fn with_file(&self, file: std::fs::File) -> Self {
+        *self.inner.out.lock().unwrap() = Box::new(file);
+        self.clone()
     }
 
     pub fn create_bar(&self, len: u64, message: &str, template: &str) -> Bar {
@@ -73,9 +78,10 @@ impl Manager {
     }
 
     pub fn draw(&self, force: bool) {
+        let now = std::time::Instant::now();
+        let mut last_draw = self.inner.last_draw.lock().unwrap();
         if !force {
-            let now = std::time::Instant::now();
-            if now - self.inner.last_draw < self.inner.refresh_interval {
+            if now - *last_draw < self.inner.refresh_interval {
                 return;
             }
         }
@@ -85,13 +91,14 @@ impl Manager {
             let state = state.lock().unwrap();
             out.write_all(
                 format!(
-                    "{} {} {} {}",
-                    state.len, state.pos, state.message, state.template
+                    "{}/{}: {} {}\n",
+                    state.pos, state.len, state.message, state.template
                 )
                 .as_bytes(),
             )
             .unwrap();
         }
+        *last_draw = now;
     }
 }
 
@@ -119,7 +126,6 @@ mod tests {
     fn basic_test() {
         let manager = Manager::new(
             std::time::Duration::from_secs(1),
-            Box::new(std::io::stdout()),
         );
         let bar_1 = manager.create_bar(100, "Downloading", "<placeholder>");
         let bar_2 = manager.create_bar(100, "Uploading", "<placeholder>");
