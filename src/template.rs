@@ -45,7 +45,7 @@ impl Template {
                         }
                         let mut tag_content = String::new();
                         let mut found_closing_brace = false;
-                        while let Some(ch2) = chars.next() {
+                        for ch2 in chars.by_ref() {
                             if ch2 == '}' {
                                 found_closing_brace = true;
                                 break;
@@ -114,9 +114,7 @@ impl Template {
                 },
             }
         }
-        
-        Template {
-            parts: results,
-        }
+
+        Template { parts: results }
     }
 }
