@@ -261,4 +261,17 @@ mod tests {
         std::mem::drop(bar_1);
         std::mem::drop(bar_2);
     }
+
+    #[test]
+    fn dont_crash_when_zero() {
+        let manager = Manager::new(std::time::Duration::from_secs(1));
+        let bar = manager.create_bar(
+            0,
+            "Downloading",
+            "{msg}\n[{elapsed}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})",
+        );
+
+        bar.set_pos(0);
+        manager.draw(true);
+    }
 }
