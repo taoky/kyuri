@@ -213,6 +213,10 @@ impl Bar {
         }
         self.manager.draw(false);
     }
+
+    pub fn get_pos(&self) -> u64 {
+        self.state.lock().unwrap().pos
+    }
 }
 
 impl Drop for Bar {
