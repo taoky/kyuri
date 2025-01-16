@@ -206,6 +206,12 @@ impl Manager {
     }
 }
 
+impl Drop for Manager {
+    fn drop(&mut self) {
+        self.draw(true);
+    }
+}
+
 impl Bar {
     pub fn set_pos(&self, pos: u64) {
         {
