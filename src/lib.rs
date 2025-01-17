@@ -9,7 +9,7 @@ use template::{Template, TemplatePart};
 const CLEAR_ANSI: &str = "\r\x1b[K";
 const UP_ANSI: &str = "\x1b[F";
 
-pub struct BarState {
+pub(crate) struct BarState {
     len: u64,
     pos: u64,
     message: String,
