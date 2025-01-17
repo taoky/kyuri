@@ -88,6 +88,18 @@ impl BarState {
                         )));
                     }
                 }
+                TemplatePart::Bar(size) => {
+                    let filled = (self.pos as f64 / self.len as f64 * *size as f64) as usize;
+                    let empty = *size - filled;
+                    result.push('[');
+                    for _ in 0..filled {
+                        result.push('=');
+                    }
+                    for _ in 0..empty {
+                        result.push(' ');
+                    }
+                    result.push(']');
+                }
             }
         }
         result
@@ -237,6 +249,12 @@ impl Drop for Manager {
 }
 
 impl Bar {
+    pub fn inc(&self, n: u64) {
+        let mut state = self.state.lock().unwrap();
+        state.pos += n;
+        self.manager.draw(false);
+    }
+
     pub fn set_pos(&self, pos: u64) {
         self.state.lock().unwrap().pos = pos;
         self.manager.draw(false);
@@ -253,6 +271,12 @@ impl Bar {
 
     pub fn get_len(&self) -> u64 {
         self.state.lock().unwrap().len
+    }
+
+    pub fn finish(self) {
+        self.set_pos(self.get_len());
+        self.manager.draw(true);
+        // Automatically drop
     }
 }
 

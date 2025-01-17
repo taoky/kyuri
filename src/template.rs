@@ -14,6 +14,7 @@ pub(crate) enum TemplatePart {
     BytesPerSecond,
     /// HH:MM:SS
     Eta,
+    Bar(usize),
     Text(String),
 }
 
@@ -104,10 +105,19 @@ impl Template {
                     "pos" => results.push(TemplatePart::Pos),
                     "total_bytes" => results.push(TemplatePart::TotalBytes),
                     "total" => results.push(TemplatePart::Total),
+                    "len" => results.push(TemplatePart::Total),
                     "bytes_per_second" => results.push(TemplatePart::BytesPerSecond),
                     // indicatif tag
                     "bytes_per_sec" => results.push(TemplatePart::BytesPerSecond),
                     "eta" => results.push(TemplatePart::Eta),
+                    s if s.starts_with("bar") => {
+                        let bar_len = if s.len() == 3 {
+                            20
+                        } else {
+                            s[3..].parse().unwrap_or(20)
+                        };
+                        results.push(TemplatePart::Bar(bar_len));
+                    }
                     _ => {
                         push_text(&mut results, &format!("{{{tag}}}"));
                     }
