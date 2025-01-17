@@ -103,10 +103,11 @@ pub struct Bar {
 struct ManagerInner {
     states: Mutex<BTreeMap<usize, Arc<Mutex<BarState>>>>,
     next_id: AtomicUsize,
-    refresh_interval: std::time::Duration,
+    interval: std::time::Duration,
     out: Mutex<Box<dyn Out>>,
     last_draw: Mutex<std::time::Instant>,
     last_lines: AtomicUsize,
+    ansi: Mutex<Option<bool>>,
 }
 
 pub trait Out: std::io::Write + std::io::IsTerminal + Send + Sync {}
@@ -118,17 +119,23 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn new(refresh_interval: std::time::Duration) -> Self {
+    pub fn new(interval: std::time::Duration) -> Self {
         Manager {
             inner: Arc::new(ManagerInner {
                 states: Mutex::new(BTreeMap::new()),
                 next_id: AtomicUsize::new(0),
-                refresh_interval,
+                interval,
                 out: Mutex::new(Box::new(std::io::stdout())),
-                last_draw: Mutex::new(std::time::Instant::now() - refresh_interval),
+                last_draw: Mutex::new(std::time::Instant::now() - interval),
                 last_lines: AtomicUsize::new(0),
+                ansi: Mutex::new(None),
             }),
         }
+    }
+
+    pub fn with_stdout(&self) -> Self {
+        *self.inner.out.lock().unwrap() = Box::new(std::io::stdout());
+        self.clone()
     }
 
     pub fn with_stderr(&self) -> Self {
@@ -138,6 +145,16 @@ impl Manager {
 
     pub fn with_file(&self, file: std::fs::File) -> Self {
         *self.inner.out.lock().unwrap() = Box::new(file);
+        self.clone()
+    }
+
+    pub fn auto_ansi(&self) -> Self {
+        *self.inner.ansi.lock().unwrap() = None;
+        self.clone()
+    }
+
+    pub fn force_ansi(&self, force: bool) -> Self {
+        *self.inner.ansi.lock().unwrap() = Some(force);
         self.clone()
     }
 
@@ -173,13 +190,17 @@ impl Manager {
     pub fn draw(&self, force: bool) {
         let now = std::time::Instant::now();
         let mut last_draw = self.inner.last_draw.lock().unwrap();
-        if !force && now - *last_draw < self.inner.refresh_interval {
+        if !force && now - *last_draw < self.inner.interval {
             return;
         }
 
         let states = self.inner.states.lock().unwrap();
+        let ansi = self.inner.ansi.lock().unwrap();
         let mut out = self.inner.out.lock().unwrap();
-        let is_terminal = out.is_terminal();
+        let is_terminal = match *ansi {
+            None => out.is_terminal(),
+            Some(force) => force,
+        };
         if is_terminal && states.len() > 0 {
             // Don't clean output when no bars are present
             for _ in 0..self
