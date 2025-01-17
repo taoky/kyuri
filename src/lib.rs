@@ -91,15 +91,26 @@ impl BarState {
                 }
                 TemplatePart::Bar(size) => {
                     let filled = (self.pos as f64 / self.len as f64 * *size as f64) as usize;
-                    let empty = *size - filled;
-                    result.push('[');
-                    for _ in 0..filled {
-                        result.push('=');
+                    if *size >= filled {
+                        let empty = *size - filled;
+                        result.push('[');
+                        for _ in 0..filled {
+                            result.push('=');
+                        }
+                        for _ in 0..empty {
+                            result.push(' ');
+                        }
+                        result.push(']');
+                    } else {
+                        let overflowed = filled - *size;
+                        result.push('[');
+                        for _ in 0..*size {
+                            result.push('=');
+                        }
+                        for _ in 0..overflowed {
+                            result.push('!');
+                        }
                     }
-                    for _ in 0..empty {
-                        result.push(' ');
-                    }
-                    result.push(']');
                 }
             }
         }
