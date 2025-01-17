@@ -15,6 +15,7 @@ pub(crate) struct BarState {
     message: String,
     template: Template,
     created_at: std::time::Instant,
+    visible: bool,
 }
 
 fn duration_to_human(duration: std::time::Duration) -> String {
@@ -170,7 +171,7 @@ impl Manager {
         self.clone()
     }
 
-    pub fn create_bar(&self, len: u64, message: &str, template: &str) -> Bar {
+    pub fn create_bar(&self, len: u64, message: &str, template: &str, visible: bool) -> Bar {
         let id = self
             .inner
             .next_id
@@ -181,6 +182,7 @@ impl Manager {
             message: message.to_string(),
             template: Template::new(template),
             created_at: std::time::Instant::now(),
+            visible,
         }));
 
         self.inner
@@ -226,6 +228,9 @@ impl Manager {
         let mut newlines = 0;
         for state in states.values() {
             let state = state.lock().unwrap();
+            if !state.visible {
+                continue;
+            }
             let outstr = format!("{}\n", state.render());
             if is_terminal {
                 newlines += outstr.chars().filter(|&c| c == '\n').count();
@@ -252,19 +257,21 @@ impl Bar {
     pub fn inc(&self, n: u64) {
         let mut state = self.state.lock().unwrap();
         state.pos += n;
+        // Drop state before drawing, deadlock otherwise!
+        std::mem::drop(state);
         self.manager.draw(false);
     }
 
     pub fn set_pos(&self, pos: u64) {
-        self.state.lock().unwrap().pos = pos;
-        if pos != 0 {
-            let len = self.state.lock().unwrap().len;
-            if pos == len {
-                self.manager.draw(true);
-                return;
-            }
+        let mut state = self.state.lock().unwrap();
+        state.pos = pos;
+        let len = state.len;
+        std::mem::drop(state);
+        if pos != 0 && pos == len {
+            self.manager.draw(true);
+        } else {
+            self.manager.draw(false);
         }
-        self.manager.draw(false);
     }
 
     pub fn set_len(&self, len: u64) {
@@ -283,6 +290,19 @@ impl Bar {
     pub fn finish(self) {
         self.set_pos(self.get_len());
         // Automatically drop
+    }
+
+    pub fn set_visible(&self, visible: bool) {
+        let mut state = self.state.lock().unwrap();
+        if state.visible != visible {
+            state.visible = visible;
+            std::mem::drop(state);
+            self.manager.draw(true);
+        }
+    }
+
+    pub fn is_visible(&self) -> bool {
+        self.state.lock().unwrap().visible
     }
 }
 
@@ -306,11 +326,13 @@ mod tests {
             100,
             "Downloading",
             "{msg}\n[{elapsed}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})",
+            true,
         );
         let bar_2 = manager.create_bar(
             100,
             "Uploading",
             "{msg}\n[{elapsed}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})",
+            true,
         );
 
         bar_1.set_pos(50);
@@ -327,10 +349,50 @@ mod tests {
             0,
             "Downloading",
             "{msg}\n[{elapsed}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})",
+            true,
         );
 
         bar.set_pos(0);
         manager.draw(true);
+    }
+
+    #[test]
+    fn inc() {
+        let manager = Manager::new(std::time::Duration::from_secs(1));
+        let bar = manager.create_bar(
+            100,
+            "Downloading",
+            "{msg}\n[{elapsed}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})",
+            true,
+        );
+
+        bar.inc(10);
+        bar.inc(10);
+        bar.inc(10);
+        bar.inc(10);
+        bar.inc(10);
+
+        assert_eq!(bar.get_pos(), 50);
+
+        std::mem::drop(bar);
+    }
+
+    #[test]
+    fn visible() {
+        let manager = Manager::new(std::time::Duration::from_secs(1));
+        let bar = manager.create_bar(
+            100,
+            "Downloading",
+            "{msg}\n[{elapsed}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})",
+            true,
+        );
+
+        assert_eq!(bar.is_visible(), true);
+
+        bar.set_visible(false);
+        assert_eq!(bar.is_visible(), false);
+
+        std::mem::drop(bar);
     }
 
     #[test]
@@ -348,11 +410,13 @@ mod tests {
             10,
             "Downloading http://d1.example.com/",
             TEMPLATE_SIMPLE,
+            true,
         );
         let pb2 = progressbar_manager.create_bar(
             10,
             "Downloading http://d2.example.com/",
             TEMPLATE_SIMPLE,
+            true,
         );
 
         pb1.set_pos(2);
