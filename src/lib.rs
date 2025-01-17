@@ -222,8 +222,17 @@ impl Bar {
         self.manager.draw(false);
     }
 
+    pub fn set_len(&self, len: u64) {
+        self.state.lock().unwrap().len = len;
+        self.manager.draw(false);
+    }
+
     pub fn get_pos(&self) -> u64 {
         self.state.lock().unwrap().pos
+    }
+
+    pub fn get_len(&self) -> u64 {
+        self.state.lock().unwrap().len
     }
 }
 
