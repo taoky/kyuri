@@ -5,25 +5,27 @@
 //! - The `Manager` (like `MultiProgress` in indicatif) manages all progress bar management and rendering.
 //! - Friendly to writing to files.
 //! - Predictable about when it would draw.
-//! 
+//!
 //! ## Examples
-//! 
+//!
 //! ```
+//! use kyuri::Manager;
+//!
 //! const TEMPLATE: &str = "{msg}: {bar} ({pos}/{len})";
 //! let manager = Manager::new(std::time::Duration::from_secs(1));
 //!
-//! let bar = manager.create_bar(10000, "Processing", TEMPLATE, true);
-//! for i in 0..=10000 {
+//! let bar = manager.create_bar(100, "Processing", TEMPLATE, true);
+//! for i in 0..=100 {
 //!     bar.set_pos(i);
 //!     std::thread::sleep(std::time::Duration::from_millis(1));
 //! }
 //! bar.finish();
 //! ```
-//! 
+//!
 //! ## Template
-//! 
+//!
 //! The template in Kyuri looks like the one in indicatif. However, only a very small subset is implemented, and some have different meanings.
-//! 
+//!
 //! Tags in template looks like `{something}`. Supported tags:
 //! - `{msg}`, `{message}`: The message of the bar.
 //! - `{elapsed}`, `{elapsed_precise}`: The elapsed time (H:MM:SS).
@@ -34,16 +36,21 @@
 //! - `{bytes_per_sec}`, `{bytes_per_second}`: The current speed in bytes per second.
 //! - `{eta}`: The estimated time of arrival (H:MM:SS).
 //! - `{bar}`, `{barNUM}`: The progress bar. The `NUM` is the size of the bar, default is 20.
-//! 
+//!
 //! Doubled `{` and `}` would not be interpreted as tags.
 
 use std::{
     collections::BTreeMap,
-    sync::{atomic::{AtomicBool, AtomicUsize}, Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, AtomicUsize},
+        Arc, Mutex,
+    },
 };
 
 mod template;
+mod ticker;
 use template::{Template, TemplatePart};
+use ticker::Ticker;
 
 const CLEAR_ANSI: &str = "\r\x1b[K";
 const UP_ANSI: &str = "\x1b[F";
@@ -164,17 +171,74 @@ pub struct Bar {
     manager: Manager,
 }
 
-struct ManagerInner {
+pub(crate) struct ManagerInner {
     states: Mutex<BTreeMap<usize, Arc<Mutex<BarState>>>>,
     ansi: Mutex<Option<bool>>,
     interval: std::time::Duration,
     out: Mutex<Box<dyn Out>>,
+    ticker: Mutex<Option<Ticker>>,
 
     // interval states
     next_id: AtomicUsize,
     last_draw: Mutex<std::time::Instant>,
     last_lines: AtomicUsize,
     need_redraw: AtomicBool,
+}
+
+impl ManagerInner {
+    pub(crate) fn is_ticker_enabled(&self) -> bool {
+        self.ticker.lock().unwrap().is_some()
+    }
+
+    pub(crate) fn draw(&self, force: bool) {
+        if !force && self.is_ticker_enabled() {
+            return;
+        }
+        let now = std::time::Instant::now();
+        let mut last_draw = self.last_draw.lock().unwrap();
+        if !force && now - *last_draw < self.interval {
+            return;
+        }
+
+        if !self
+            .need_redraw
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+        {
+            return;
+        }
+        let states = self.states.lock().unwrap();
+        let ansi = self.ansi.lock().unwrap();
+        let mut out = self.out.lock().unwrap();
+        let is_terminal = match *ansi {
+            None => out.is_terminal(),
+            Some(force) => force,
+        };
+        if is_terminal && states.len() > 0 {
+            // Don't clean output when no bars are present
+            for _ in 0..self.last_lines.load(std::sync::atomic::Ordering::Relaxed) {
+                let _ = out.write_all(format!("{}{}", UP_ANSI, CLEAR_ANSI).as_bytes());
+            }
+        }
+
+        let mut newlines = 0;
+        for state in states.values() {
+            let state = state.lock().unwrap();
+            if !state.visible {
+                continue;
+            }
+            let outstr = format!("{}\n", state.render());
+            if is_terminal {
+                newlines += outstr.chars().filter(|&c| c == '\n').count();
+            }
+            let _ = out.write_all(outstr.as_bytes());
+        }
+        if is_terminal {
+            self.last_lines
+                .store(newlines, std::sync::atomic::Ordering::Relaxed);
+        }
+
+        *last_draw = now;
+    }
 }
 
 /// Trait for progress output streams. `std::io::stdout`, `std::io::stderr` and `std::fs::File` implement this trait.
@@ -203,12 +267,15 @@ impl Manager {
                 last_lines: AtomicUsize::new(0),
                 ansi: Mutex::new(None),
                 need_redraw: AtomicBool::new(false),
+                ticker: Mutex::new(None),
             }),
         }
     }
 
     fn mark_redraw(&self) {
-        self.inner.need_redraw.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.inner
+            .need_redraw
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Set the `Manager` to write to stdout.
@@ -244,6 +311,18 @@ impl Manager {
         *self.inner.ansi.lock().unwrap() = Some(force);
         self.mark_redraw();
         self.clone()
+    }
+
+    /// Ticker enables a background thread to draw progress bars at a fixed interval.
+    ///
+    /// When ticker is enabled, unforced draw would be ignored.
+    pub fn set_ticker(&self, set_ticker: bool) {
+        let mut ticker = self.inner.ticker.lock().unwrap();
+        if set_ticker && ticker.is_none() {
+            *ticker = Some(Ticker::new(Arc::downgrade(&self.inner)));
+        } else if !set_ticker && ticker.is_some() {
+            *ticker = None;
+        }
     }
 
     /// Create a new progress bar.
@@ -288,58 +367,13 @@ impl Manager {
 
     /// Draw all progress bars. In most cases it's not necessary to call this manually.
     ///
-    /// If nothing changed, it would not draw no matter the value of `force`.
-    /// 
-    /// When `force` is false, it only draws when the interval has passed. Otherwise, it always draws.
-    /// 
+    /// If nothing changed, it would not draw no matter what.
+    ///
+    /// If ticker is enabled, unforced draw would be ignored. Otherwise, it would only draw when the interval has passed.
+    ///
     /// Progress bars would be drawed by the order of `Bar` creation. In ANSI mode, it would clear the previous output.
     pub fn draw(&self, force: bool) {
-        let now = std::time::Instant::now();
-        let mut last_draw = self.inner.last_draw.lock().unwrap();
-        if !force && now - *last_draw < self.inner.interval {
-            return;
-        }
-
-        if !self.inner.need_redraw.swap(false, std::sync::atomic::Ordering::Relaxed) {
-            return;
-        }
-        let states = self.inner.states.lock().unwrap();
-        let ansi = self.inner.ansi.lock().unwrap();
-        let mut out = self.inner.out.lock().unwrap();
-        let is_terminal = match *ansi {
-            None => out.is_terminal(),
-            Some(force) => force,
-        };
-        if is_terminal && states.len() > 0 {
-            // Don't clean output when no bars are present
-            for _ in 0..self
-                .inner
-                .last_lines
-                .load(std::sync::atomic::Ordering::Relaxed)
-            {
-                let _ = out.write_all(format!("{}{}", UP_ANSI, CLEAR_ANSI).as_bytes());
-            }
-        }
-
-        let mut newlines = 0;
-        for state in states.values() {
-            let state = state.lock().unwrap();
-            if !state.visible {
-                continue;
-            }
-            let outstr = format!("{}\n", state.render());
-            if is_terminal {
-                newlines += outstr.chars().filter(|&c| c == '\n').count();
-            }
-            let _ = out.write_all(outstr.as_bytes());
-        }
-        if is_terminal {
-            self.inner
-                .last_lines
-                .store(newlines, std::sync::atomic::Ordering::Relaxed);
-        }
-
-        *last_draw = now;
+        self.inner.draw(force);
     }
 }
 
@@ -497,6 +531,21 @@ mod tests {
         bar.set_visible(false);
         assert_eq!(bar.is_visible(), false);
 
+        std::mem::drop(bar);
+    }
+
+    #[test]
+    fn ticker() {
+        let manager = Manager::new(std::time::Duration::from_secs(1));
+        manager.set_ticker(true);
+        let bar = manager.create_bar(
+            100,
+            "Downloading",
+            "{msg}\n[{elapsed}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})",
+            true,
+        );
+
+        std::thread::sleep(std::time::Duration::from_secs(2));
         std::mem::drop(bar);
     }
 
