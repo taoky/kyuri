@@ -257,6 +257,13 @@ impl Bar {
 
     pub fn set_pos(&self, pos: u64) {
         self.state.lock().unwrap().pos = pos;
+        if pos != 0 {
+            let len = self.state.lock().unwrap().len;
+            if pos == len {
+                self.manager.draw(true);
+                return;
+            }
+        }
         self.manager.draw(false);
     }
 
@@ -275,7 +282,6 @@ impl Bar {
 
     pub fn finish(self) {
         self.set_pos(self.get_len());
-        self.manager.draw(true);
         // Automatically drop
     }
 }
