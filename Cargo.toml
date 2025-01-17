@@ -5,6 +5,7 @@ edition = "2021"
 description = "A very simple progress display library"
 license = "MIT"
 repository = "https://github.com/taoky/kyuri"
+readme = "README.md"
 
 [dependencies]
 

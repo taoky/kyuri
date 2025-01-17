@@ -1,3 +1,11 @@
+//! A simple progress display library.
+//!
+//! Kyuri is a simple progress display library. Different from [indicatif](https://github.com/console-rs/indicatif), it:
+//! - Depends on std only
+//! - The `Manager` (like `MultiProgress` in indicatif) manages all progress bar management and rendering
+//! - Friendly to writing to files
+//! - Predictable about when it would draw
+
 use std::{
     collections::BTreeMap,
     sync::{atomic::AtomicUsize, Arc, Mutex},
@@ -118,6 +126,7 @@ impl BarState {
     }
 }
 
+/// A handle for users to control a progress bar created by `Manager`.
 pub struct Bar {
     id: usize,
     state: Arc<Mutex<BarState>>,
@@ -134,15 +143,21 @@ struct ManagerInner {
     ansi: Mutex<Option<bool>>,
 }
 
+/// Trait for progress output streams. `std::io::stdout`, `std::io::stderr` and `std::fs::File` implement this trait.
 pub trait Out: std::io::Write + std::io::IsTerminal + Send + Sync {}
 impl<T: std::io::Write + std::io::IsTerminal + Send + Sync> Out for T {}
 
+/// The manager for progress bars. It's expected for users to create a `Manager`, create progress bars from it,
+/// and drop it (and all `Bar`s) when all work has been done.
 #[derive(Clone)]
 pub struct Manager {
     inner: Arc<ManagerInner>,
 }
 
 impl Manager {
+    /// Create a new `Manager` to stdout.
+    ///
+    /// The `interval` parameter specifies the minimum interval between two unforced draws.
     pub fn new(interval: std::time::Duration) -> Self {
         Manager {
             inner: Arc::new(ManagerInner {
@@ -157,31 +172,44 @@ impl Manager {
         }
     }
 
+    /// Set the `Manager` to write to stdout.
     pub fn with_stdout(&self) -> Self {
         *self.inner.out.lock().unwrap() = Box::new(std::io::stdout());
         self.clone()
     }
 
+    /// Set the `Manager` to write to stderr.
     pub fn with_stderr(&self) -> Self {
         *self.inner.out.lock().unwrap() = Box::new(std::io::stderr());
         self.clone()
     }
 
+    /// Set the `Manager` to write to a file.
     pub fn with_file(&self, file: std::fs::File) -> Self {
         *self.inner.out.lock().unwrap() = Box::new(file);
         self.clone()
     }
 
+    /// Let `Manager` automatically detect whether it's writing to a terminal and use ANSI or not.
     pub fn auto_ansi(&self) -> Self {
         *self.inner.ansi.lock().unwrap() = None;
         self.clone()
     }
 
+    /// Force `Manager` to use ANSI escape codes or not.
     pub fn force_ansi(&self, force: bool) -> Self {
         *self.inner.ansi.lock().unwrap() = Some(force);
         self.clone()
     }
 
+    /// Create a new progress bar.
+    ///
+    /// - `len`: The total length of the progress bar.
+    /// - `message`: The message of the bar. Use `{msg}` in the template to refer to this.
+    /// - `template`: The template of the bar.
+    /// - `visible`: Whether the bar is visible.
+    ///
+    /// This makes a forced draw when visible is true.
     pub fn create_bar(&self, len: u64, message: &str, template: &str, visible: bool) -> Bar {
         let id = self
             .inner
@@ -202,7 +230,9 @@ impl Manager {
             .unwrap()
             .insert(id, bar_state.clone());
 
-        self.draw(true);
+        if visible {
+            self.draw(true);
+        }
 
         Bar {
             manager: self.clone(),
@@ -211,6 +241,11 @@ impl Manager {
         }
     }
 
+    /// Draw all progress bars. In most cases it's not necessary to call this manually.
+    ///
+    /// When `force` is false, it only draws when the interval has passed. Otherwise, it always draws.
+    /// 
+    /// Progress bars would be drawed by the order of `Bar` creation. In ANSI mode, it would clear the previous output.
     pub fn draw(&self, force: bool) {
         let now = std::time::Instant::now();
         let mut last_draw = self.inner.last_draw.lock().unwrap();
@@ -259,12 +294,14 @@ impl Manager {
 }
 
 impl Drop for Manager {
+    /// Force a draw when the `Manager` is dropped.
     fn drop(&mut self) {
         self.draw(true);
     }
 }
 
 impl Bar {
+    /// Increment the progress bar by `n`. This makes an unforced draw.
     pub fn inc(&self, n: u64) {
         let mut state = self.state.lock().unwrap();
         state.pos += n;
@@ -273,36 +310,36 @@ impl Bar {
         self.manager.draw(false);
     }
 
+    /// Set the position of the progress bar. This makes an unforced draw.
     pub fn set_pos(&self, pos: u64) {
-        let mut state = self.state.lock().unwrap();
-        state.pos = pos;
-        let len = state.len;
-        std::mem::drop(state);
-        if pos != 0 && pos == len {
-            self.manager.draw(true);
-        } else {
-            self.manager.draw(false);
-        }
+        self.state.lock().unwrap().pos = pos;
+        self.manager.draw(false);
     }
 
+    /// Set the total length of the progress bar. This makes an unforced draw.
     pub fn set_len(&self, len: u64) {
         self.state.lock().unwrap().len = len;
         self.manager.draw(false);
     }
 
+    /// Get the position of the progress bar.
     pub fn get_pos(&self) -> u64 {
         self.state.lock().unwrap().pos
     }
 
+    /// Get the total length of the progress bar.
     pub fn get_len(&self) -> u64 {
         self.state.lock().unwrap().len
     }
 
+    /// Set the progress bar to the end, and force a draw.
     pub fn finish(self) {
         self.set_pos(self.get_len());
+        self.manager.draw(true);
         // Automatically drop
     }
 
+    /// Set the visibility of the progress bar. This makes an forced draw when visible actually changes.
     pub fn set_visible(&self, visible: bool) {
         let mut state = self.state.lock().unwrap();
         if state.visible != visible {
@@ -312,12 +349,14 @@ impl Bar {
         }
     }
 
+    /// Get the visibility of the progress bar.
     pub fn is_visible(&self) -> bool {
         self.state.lock().unwrap().visible
     }
 }
 
 impl Drop for Bar {
+    /// Drop the progress bar. This removes the progress bar from the manager and forces a draw.
     fn drop(&mut self) {
         self.manager.inner.states.lock().unwrap().remove(&self.id);
         self.manager.draw(true);
