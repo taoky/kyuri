@@ -14,7 +14,7 @@ fn main() {
         }
         bar_1.set_visible(false);
     });
-    let t2 = std::thread::spawn(move || {
+    let t2 = std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_secs(1));
         bar_2.set_visible(true);
         for i in 0..200 {

@@ -39,7 +39,7 @@
 
 use std::{
     collections::BTreeMap,
-    sync::{atomic::AtomicUsize, Arc, Mutex},
+    sync::{atomic::{AtomicBool, AtomicUsize}, Arc, Mutex},
 };
 
 mod template;
@@ -166,12 +166,15 @@ pub struct Bar {
 
 struct ManagerInner {
     states: Mutex<BTreeMap<usize, Arc<Mutex<BarState>>>>,
-    next_id: AtomicUsize,
+    ansi: Mutex<Option<bool>>,
     interval: std::time::Duration,
     out: Mutex<Box<dyn Out>>,
+
+    // interval states
+    next_id: AtomicUsize,
     last_draw: Mutex<std::time::Instant>,
     last_lines: AtomicUsize,
-    ansi: Mutex<Option<bool>>,
+    need_redraw: AtomicBool,
 }
 
 /// Trait for progress output streams. `std::io::stdout`, `std::io::stderr` and `std::fs::File` implement this trait.
@@ -199,37 +202,47 @@ impl Manager {
                 last_draw: Mutex::new(std::time::Instant::now() - interval),
                 last_lines: AtomicUsize::new(0),
                 ansi: Mutex::new(None),
+                need_redraw: AtomicBool::new(false),
             }),
         }
+    }
+
+    fn mark_redraw(&self) {
+        self.inner.need_redraw.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Set the `Manager` to write to stdout.
     pub fn with_stdout(&self) -> Self {
         *self.inner.out.lock().unwrap() = Box::new(std::io::stdout());
+        self.mark_redraw();
         self.clone()
     }
 
     /// Set the `Manager` to write to stderr.
     pub fn with_stderr(&self) -> Self {
         *self.inner.out.lock().unwrap() = Box::new(std::io::stderr());
+        self.mark_redraw();
         self.clone()
     }
 
     /// Set the `Manager` to write to a file.
     pub fn with_file(&self, file: std::fs::File) -> Self {
         *self.inner.out.lock().unwrap() = Box::new(file);
+        self.mark_redraw();
         self.clone()
     }
 
     /// Let `Manager` automatically detect whether it's writing to a terminal and use ANSI or not.
     pub fn auto_ansi(&self) -> Self {
         *self.inner.ansi.lock().unwrap() = None;
+        self.mark_redraw();
         self.clone()
     }
 
     /// Force `Manager` to use ANSI escape codes or not.
     pub fn force_ansi(&self, force: bool) -> Self {
         *self.inner.ansi.lock().unwrap() = Some(force);
+        self.mark_redraw();
         self.clone()
     }
 
@@ -262,6 +275,7 @@ impl Manager {
             .insert(id, bar_state.clone());
 
         if visible {
+            self.mark_redraw();
             self.draw(true);
         }
 
@@ -274,6 +288,8 @@ impl Manager {
 
     /// Draw all progress bars. In most cases it's not necessary to call this manually.
     ///
+    /// If nothing changed, it would not draw no matter the value of `force`.
+    /// 
     /// When `force` is false, it only draws when the interval has passed. Otherwise, it always draws.
     /// 
     /// Progress bars would be drawed by the order of `Bar` creation. In ANSI mode, it would clear the previous output.
@@ -284,6 +300,9 @@ impl Manager {
             return;
         }
 
+        if !self.inner.need_redraw.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            return;
+        }
         let states = self.inner.states.lock().unwrap();
         let ansi = self.inner.ansi.lock().unwrap();
         let mut out = self.inner.out.lock().unwrap();
@@ -338,18 +357,21 @@ impl Bar {
         state.pos += n;
         // Drop state before drawing, deadlock otherwise!
         std::mem::drop(state);
+        self.manager.mark_redraw();
         self.manager.draw(false);
     }
 
     /// Set the position of the progress bar. This makes an unforced draw.
     pub fn set_pos(&self, pos: u64) {
         self.state.lock().unwrap().pos = pos;
+        self.manager.mark_redraw();
         self.manager.draw(false);
     }
 
     /// Set the total length of the progress bar. This makes an unforced draw.
     pub fn set_len(&self, len: u64) {
         self.state.lock().unwrap().len = len;
+        self.manager.mark_redraw();
         self.manager.draw(false);
     }
 
@@ -376,6 +398,7 @@ impl Bar {
         if state.visible != visible {
             state.visible = visible;
             std::mem::drop(state);
+            self.manager.mark_redraw();
             self.manager.draw(true);
         }
     }
@@ -390,6 +413,7 @@ impl Drop for Bar {
     /// Drop the progress bar. This removes the progress bar from the manager and forces a draw.
     fn drop(&mut self) {
         self.manager.inner.states.lock().unwrap().remove(&self.id);
+        self.manager.mark_redraw();
         self.manager.draw(true);
     }
 }
