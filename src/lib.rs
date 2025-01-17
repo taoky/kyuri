@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     sync::{atomic::AtomicUsize, Arc, Mutex},
 };
 
@@ -101,7 +101,7 @@ pub struct Bar {
 }
 
 struct ManagerInner {
-    states: Mutex<HashMap<usize, Arc<Mutex<BarState>>>>,
+    states: Mutex<BTreeMap<usize, Arc<Mutex<BarState>>>>,
     next_id: AtomicUsize,
     refresh_interval: std::time::Duration,
     out: Mutex<Box<dyn Out>>,
@@ -121,7 +121,7 @@ impl Manager {
     pub fn new(refresh_interval: std::time::Duration) -> Self {
         Manager {
             inner: Arc::new(ManagerInner {
-                states: Mutex::new(HashMap::new()),
+                states: Mutex::new(BTreeMap::new()),
                 next_id: AtomicUsize::new(0),
                 refresh_interval,
                 out: Mutex::new(Box::new(std::io::stdout())),
@@ -218,9 +218,7 @@ impl Drop for Manager {
 
 impl Bar {
     pub fn set_pos(&self, pos: u64) {
-        {
-            self.state.lock().unwrap().pos = pos;
-        }
+        self.state.lock().unwrap().pos = pos;
         self.manager.draw(false);
     }
 
@@ -287,8 +285,16 @@ mod tests {
         let mut memfd_writer_clone = memfd_writer.try_clone().unwrap();
         let progressbar_manager =
             Manager::new(std::time::Duration::from_secs(1)).with_file(memfd_writer);
-        let pb1 = progressbar_manager.create_bar(10, "Downloading http://d1.example.com/", TEMPLATE_SIMPLE);
-        let pb2 = progressbar_manager.create_bar(10, "Downloading http://d2.example.com/", TEMPLATE_SIMPLE);
+        let pb1 = progressbar_manager.create_bar(
+            10,
+            "Downloading http://d1.example.com/",
+            TEMPLATE_SIMPLE,
+        );
+        let pb2 = progressbar_manager.create_bar(
+            10,
+            "Downloading http://d2.example.com/",
+            TEMPLATE_SIMPLE,
+        );
 
         pb1.set_pos(2);
         pb2.set_pos(3);
