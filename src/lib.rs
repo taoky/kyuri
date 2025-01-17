@@ -1,10 +1,41 @@
 //! A simple progress display library.
 //!
 //! Kyuri is a simple progress display library. Different from [indicatif](https://github.com/console-rs/indicatif), it:
-//! - Depends on std only
-//! - The `Manager` (like `MultiProgress` in indicatif) manages all progress bar management and rendering
-//! - Friendly to writing to files
-//! - Predictable about when it would draw
+//! - Depends on std only.
+//! - The `Manager` (like `MultiProgress` in indicatif) manages all progress bar management and rendering.
+//! - Friendly to writing to files.
+//! - Predictable about when it would draw.
+//! 
+//! ## Examples
+//! 
+//! ```
+//! const TEMPLATE: &str = "{msg}: {bar} ({pos}/{len})";
+//! let manager = Manager::new(std::time::Duration::from_secs(1));
+//!
+//! let bar = manager.create_bar(10000, "Processing", TEMPLATE, true);
+//! for i in 0..=10000 {
+//!     bar.set_pos(i);
+//!     std::thread::sleep(std::time::Duration::from_millis(1));
+//! }
+//! bar.finish();
+//! ```
+//! 
+//! ## Template
+//! 
+//! The template in Kyuri looks like the one in indicatif. However, only a very small subset is implemented, and some have different meanings.
+//! 
+//! Tags in template looks like `{something}`. Supported tags:
+//! - `{msg}`, `{message}`: The message of the bar.
+//! - `{elapsed}`, `{elapsed_precise}`: The elapsed time (H:MM:SS).
+//! - `{bytes}`: The current position in bytes (power-of-two, `KiB`, `MiB`, ...).
+//! - `{pos}`: The current position.
+//! - `{total_bytes}`: The total length in bytes (power-of-two, `KiB`, `MiB`, ...).
+//! - `{total}`, `{len}`: The total length.
+//! - `{bytes_per_sec}`, `{bytes_per_second}`: The current speed in bytes per second.
+//! - `{eta}`: The estimated time of arrival (H:MM:SS).
+//! - `{bar}`, `{barNUM}`: The progress bar. The `NUM` is the size of the bar, default is 20.
+//! 
+//! Doubled `{` and `}` would not be interpreted as tags.
 
 use std::{
     collections::BTreeMap,
