@@ -13,7 +13,7 @@ fn main() {
             let size = rng.gen::<u16>() as u64;
             let interval_micros = rng.gen_range(1..100);
             let bar_1 =
-                manager_0.create_bar(size, &format!("Downloading {} (thread 1)", cnt), TEMPLATE);
+                manager_0.create_bar(size, &format!("Downloading {} (thread 1)", cnt), TEMPLATE, true);
             for i in 0..size {
                 bar_1.set_pos(i);
                 std::thread::sleep(std::time::Duration::from_micros(interval_micros));
@@ -29,7 +29,7 @@ fn main() {
             let size = rng.gen::<u16>() as u64;
             let interval_micros = rng.gen_range(1..100);
             let bar_2 =
-                manager_1.create_bar(size, &format!("Downloading {} (thread 2)", cnt), TEMPLATE);
+                manager_1.create_bar(size, &format!("Downloading {} (thread 2)", cnt), TEMPLATE, true);
             for i in 0..size {
                 bar_2.set_pos(i);
                 std::thread::sleep(std::time::Duration::from_micros(interval_micros));
