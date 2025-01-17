@@ -187,8 +187,7 @@ impl Manager {
                 .last_lines
                 .load(std::sync::atomic::Ordering::Relaxed)
             {
-                out.write_all(format!("{}{}", UP_ANSI, CLEAR_ANSI).as_bytes())
-                    .unwrap();
+                let _ = out.write_all(format!("{}{}", UP_ANSI, CLEAR_ANSI).as_bytes());
             }
         }
 
@@ -199,7 +198,7 @@ impl Manager {
             if is_terminal {
                 newlines += outstr.chars().filter(|&c| c == '\n').count();
             }
-            out.write_all(outstr.as_bytes()).unwrap();
+            let _ = out.write_all(outstr.as_bytes());
         }
         if is_terminal {
             self.inner
