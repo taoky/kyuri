@@ -166,8 +166,7 @@ impl Manager {
         let bar_state = Arc::new(Mutex::new(BarState {
             len,
             pos: 0,
-            // message must not contain control characters like \n
-            message: message.chars().filter(|c| !c.is_control()).collect(),
+            message: message.to_string(),
             template: Template::new(template),
             created_at: std::time::Instant::now(),
         }));
