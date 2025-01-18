@@ -435,11 +435,16 @@ impl Bar {
     }
 
     /// Set the progress bar to the end, and force a draw.
-    pub fn finish(self) {
+    pub fn finish(&self) {
         if self.get_pos() != self.get_len() {
             self.set_pos(self.get_len());
         }
         self.manager.draw(true);
+    }
+
+    /// Set the progress bar to the end, force a draw, and remove the progress bar from the manager.
+    pub fn finish_and_drop(self) {
+        self.finish();
         // Automatically drop
     }
 
@@ -458,6 +463,26 @@ impl Bar {
     /// Get the visibility of the progress bar.
     pub fn is_visible(&self) -> bool {
         self.state.lock().unwrap().visible
+    }
+
+    /// Set the message of the progress bar. This makes an unforced draw.
+    pub fn set_message(&self, message: &str) {
+        let mut state = self.state.lock().unwrap();
+        state.message = message.to_string();
+        state.need_redraw = true;
+        std::mem::drop(state);
+        self.manager.mark_redraw();
+        self.manager.draw(false);
+    }
+
+    /// Set the template of the progress bar. This makes an unforced draw.
+    pub fn set_template(&self, template: &str) {
+        let mut state = self.state.lock().unwrap();
+        state.template = Template::new(template);
+        state.need_redraw = true;
+        std::mem::drop(state);
+        self.manager.mark_redraw();
+        self.manager.draw(false);
     }
 }
 
