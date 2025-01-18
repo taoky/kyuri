@@ -18,14 +18,18 @@ If you need a progress bar or spinner with rich and fancy features, use [indicat
 
 ## Examples
 
-- Simple example
+- [Simple example](examples/progress.rs)
+
+    ![progress](assets/progress.gif)
 
     ```shell
     cargo run --example progress
     cargo run --example progress > file
     ```
 
-- 2 threads example
+- 2 threads example ([thread](examples/thread.rs), [download](examples/download.rs))
+
+    ![progress](assets/thread.gif)
 
     ```shell
     cargo run --example thread
@@ -34,12 +38,16 @@ If you need a progress bar or spinner with rich and fancy features, use [indicat
 
     or this with a different pattern:
 
+    ![download](assets/download.gif)
+
     ```shell
     cargo run --example download
     cargo run --example download > file
     ```
 
 - Progress bar example
+
+    ![bar](assets/bar.gif)
 
     ```shell
     cargo run --example bar
@@ -48,7 +56,15 @@ If you need a progress bar or spinner with rich and fancy features, use [indicat
 
 - `tracing` integration example
 
+    ![bar](assets/tracing.gif)
+
     ```shell
     cargo run --example tracing
     cargo run --example tracing > file
     ```
+
+---
+
+![cucumber](assets/cucumber.jpg)
+
+(Taken from *[BanG Dream! It's MyGO!!!!!](https://en.wikipedia.org/wiki/MyGO!!!!!)* episode 6.)
