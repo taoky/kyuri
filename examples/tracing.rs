@@ -29,11 +29,9 @@ fn main() {
                 })
             })
             .collect();
-        s.spawn(|| {
-            loop {
-                warn!("Something happened!");
-                std::thread::sleep(std::time::Duration::from_millis(1100));
-            }
+        s.spawn(|| loop {
+            warn!("Something happened!");
+            std::thread::sleep(std::time::Duration::from_millis(1100));
         });
     });
 }

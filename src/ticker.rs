@@ -1,5 +1,5 @@
 use std::{
-    sync::{Arc, Condvar, Mutex, Weak},
+    sync::{Arc, Condvar, Mutex},
     thread,
 };
 
@@ -9,17 +9,16 @@ pub(crate) struct Ticker {
     // thread join requires ownership of the thread, so an Option is used to take it out
     thread: Option<thread::JoinHandle<()>>,
     condvar: Arc<(Mutex<bool>, Condvar)>,
-    // manager: Weak<ManagerInner>,
 }
 
 impl Ticker {
-    pub(crate) fn new(manager: Weak<ManagerInner>) -> Self {
+    pub(crate) fn new(manager: Arc<ManagerInner>) -> Self {
         let condvar = Arc::new((Mutex::new(false), Condvar::new()));
 
         let condvar2 = Arc::clone(&condvar);
-        let manager2 = Weak::clone(&manager);
+        let manager = Arc::downgrade(&manager);
         let thread = thread::spawn(move || {
-            while let Some(manager) = manager2.upgrade() {
+            while let Some(manager) = manager.upgrade() {
                 let interval = manager.interval;
                 let (lock, cvar) = &*condvar2;
                 let done = cvar
@@ -35,7 +34,6 @@ impl Ticker {
         Self {
             thread: Some(thread),
             condvar,
-            // manager,
         }
     }
 

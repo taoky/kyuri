@@ -362,7 +362,7 @@ impl Manager {
     pub fn set_ticker(&self, set_ticker: bool) {
         let mut ticker = self.inner.ticker.lock().unwrap();
         if set_ticker && ticker.is_none() {
-            *ticker = Some(Ticker::new(Arc::downgrade(&self.inner)));
+            *ticker = Some(Ticker::new(self.inner.clone()));
         } else if !set_ticker && ticker.is_some() {
             *ticker = None;
         }
@@ -507,10 +507,6 @@ impl Bar {
 
     /// Set the progress bar to the end, and force a draw.
     pub fn finish(&self) {
-        // if self.get_pos() != self.get_len() {
-        //     self.set_pos(self.get_len());
-        // }
-        // self.manager.draw(true);
         if let Some((manager, state)) = self.get_manager_and_state() {
             let state = state.lock().unwrap();
             let pos = state.pos;
