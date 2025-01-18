@@ -5,6 +5,7 @@
 //! - The `Manager` (like `MultiProgress` in indicatif) manages all progress bar management and rendering.
 //! - Friendly to writing to files.
 //! - Predictable about when it would draw.
+//! - Custom integrations with other libraries (an example: examples/tracing.rs)
 //!
 //! ## Examples
 //!
