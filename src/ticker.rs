@@ -28,7 +28,8 @@ impl Ticker {
                 if !done.1.timed_out() {
                     break;
                 }
-                manager.draw(false);
+                // When ticker is on, unforced draw is ignored.
+                manager.draw(true);
             }
         });
         Self {

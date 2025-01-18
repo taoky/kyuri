@@ -62,6 +62,7 @@ pub(crate) struct BarState {
     template: Template,
     created_at: std::time::Instant,
     visible: bool,
+    need_redraw: bool,
 }
 
 fn duration_to_human(duration: std::time::Duration) -> String {
@@ -222,8 +223,11 @@ impl ManagerInner {
 
         let mut newlines = 0;
         for state in states.values() {
-            let state = state.lock().unwrap();
+            let mut state = state.lock().unwrap();
             if !state.visible {
+                continue;
+            }
+            if !is_terminal && !state.need_redraw {
                 continue;
             }
             let outstr = format!("{}\n", state.render());
@@ -231,6 +235,7 @@ impl ManagerInner {
                 newlines += outstr.chars().filter(|&c| c == '\n').count();
             }
             let _ = out.write_all(outstr.as_bytes());
+            state.need_redraw = false;
         }
         if is_terminal {
             self.last_lines
@@ -345,6 +350,7 @@ impl Manager {
             template: Template::new(template),
             created_at: std::time::Instant::now(),
             visible,
+            need_redraw: true,
         }));
 
         self.inner
@@ -389,6 +395,7 @@ impl Bar {
     pub fn inc(&self, n: u64) {
         let mut state = self.state.lock().unwrap();
         state.pos += n;
+        state.need_redraw = true;
         // Drop state before drawing, deadlock otherwise!
         std::mem::drop(state);
         self.manager.mark_redraw();
@@ -397,14 +404,20 @@ impl Bar {
 
     /// Set the position of the progress bar. This makes an unforced draw.
     pub fn set_pos(&self, pos: u64) {
-        self.state.lock().unwrap().pos = pos;
+        let mut state = self.state.lock().unwrap();
+        state.pos = pos;
+        state.need_redraw = true;
+        std::mem::drop(state);
         self.manager.mark_redraw();
         self.manager.draw(false);
     }
 
     /// Set the total length of the progress bar. This makes an unforced draw.
     pub fn set_len(&self, len: u64) {
-        self.state.lock().unwrap().len = len;
+        let mut state = self.state.lock().unwrap();
+        state.len = len;
+        state.need_redraw = true;
+        std::mem::drop(state);
         self.manager.mark_redraw();
         self.manager.draw(false);
     }
@@ -421,7 +434,9 @@ impl Bar {
 
     /// Set the progress bar to the end, and force a draw.
     pub fn finish(self) {
-        self.set_pos(self.get_len());
+        if self.get_pos() != self.get_len() {
+            self.set_pos(self.get_len());
+        }
         self.manager.draw(true);
         // Automatically drop
     }
@@ -431,6 +446,7 @@ impl Bar {
         let mut state = self.state.lock().unwrap();
         if state.visible != visible {
             state.visible = visible;
+            state.need_redraw = true;
             std::mem::drop(state);
             self.manager.mark_redraw();
             self.manager.draw(true);

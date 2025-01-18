@@ -3,6 +3,7 @@ use kyuri::Manager;
 fn main() {
     const TEMPLATE: &str = "{msg}\n[{elapsed}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})";
     let manager = Manager::new(std::time::Duration::from_secs(1));
+    manager.set_ticker(true);
     let bar_1 = manager.create_bar(100, "Downloading at thread 1", TEMPLATE, false);
     let bar_2 = manager.create_bar(200, "Uploading at thread 2", TEMPLATE, false);
     let t1 = std::thread::spawn(move || loop {
