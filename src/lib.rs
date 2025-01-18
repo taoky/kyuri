@@ -62,6 +62,7 @@ pub(crate) struct BarState {
     template: Template,
     created_at: std::time::Instant,
     visible: bool,
+    /// Note that need_redraw for individual bars would only be respected when output is not a terminal.
     need_redraw: bool,
 }
 
@@ -191,36 +192,27 @@ impl ManagerInner {
         self.ticker.lock().unwrap().is_some()
     }
 
-    pub(crate) fn draw(&self, force: bool) {
-        if !force && self.is_ticker_enabled() {
-            return;
+    /// This is expected to be called only when it's ANSI mode.
+    pub(crate) fn clear_existing(&self, out: &mut Box<dyn Out>) {
+        for _ in 0..self.last_lines.load(std::sync::atomic::Ordering::Relaxed) {
+            let _ = out.write_all(format!("{}{}", UP_ANSI, CLEAR_ANSI).as_bytes());
         }
-        let now = std::time::Instant::now();
-        let mut last_draw = self.last_draw.lock().unwrap();
-        if !force && now - *last_draw < self.interval {
-            return;
-        }
+    }
 
-        if !self
-            .need_redraw
-            .swap(false, std::sync::atomic::Ordering::Relaxed)
-        {
-            return;
-        }
-        let states = self.states.lock().unwrap();
+    pub(crate) fn is_terminal(&self, out: &mut Box<dyn Out>) -> bool {
         let ansi = self.ansi.lock().unwrap();
-        let mut out = self.out.lock().unwrap();
-        let is_terminal = match *ansi {
+        match *ansi {
             None => out.is_terminal(),
             Some(force) => force,
-        };
-        if is_terminal && states.len() > 0 {
-            // Don't clean output when no bars are present
-            for _ in 0..self.last_lines.load(std::sync::atomic::Ordering::Relaxed) {
-                let _ = out.write_all(format!("{}{}", UP_ANSI, CLEAR_ANSI).as_bytes());
-            }
         }
+    }
 
+    pub(crate) fn draw_inner(
+        &self,
+        states: &BTreeMap<usize, Arc<Mutex<BarState>>>,
+        out: &mut Box<dyn Out>,
+        is_terminal: bool,
+    ) {
         let mut newlines = 0;
         for state in states.values() {
             let mut state = state.lock().unwrap();
@@ -241,6 +233,33 @@ impl ManagerInner {
             self.last_lines
                 .store(newlines, std::sync::atomic::Ordering::Relaxed);
         }
+    }
+
+    pub(crate) fn draw(&self, force: bool) {
+        if !force && self.is_ticker_enabled() {
+            return;
+        }
+        let now = std::time::Instant::now();
+        let mut last_draw = self.last_draw.lock().unwrap();
+        if !force && now - *last_draw < self.interval {
+            return;
+        }
+
+        if !self
+            .need_redraw
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+        {
+            return;
+        }
+        let states = self.states.lock().unwrap();
+        let mut out = self.out.lock().unwrap();
+        let is_terminal = self.is_terminal(&mut out);
+        if is_terminal && states.len() > 0 {
+            // Don't clean output when no bars are present
+            self.clear_existing(&mut out);
+        }
+
+        self.draw_inner(&states, &mut out, is_terminal);
 
         *last_draw = now;
     }
@@ -382,6 +401,25 @@ impl Manager {
     /// Finally, when output is not a terminal, bars would be drawn only when it needs to be redrawn.
     pub fn draw(&self, force: bool) {
         self.inner.draw(force);
+    }
+
+    /// Hide all progress bars, run the closure, and show them again like indicatif::MultiProgress::suspend.
+    ///
+    /// This method is used for implementing integrations with other libraries that may print to the terminal.
+    ///
+    /// When output is not a terminal, the closure would still be run but nothing would be done to the progress bars.
+    pub fn suspend<F: FnOnce() -> R, R>(&self, f: F) -> R {
+        let mut out = self.inner.out.lock().unwrap();
+        let is_terminal = self.inner.is_terminal(&mut out);
+        if is_terminal {
+            self.inner.clear_existing(&mut out);
+        }
+        let result = f();
+        if is_terminal {
+            let states = self.inner.states.lock().unwrap();
+            self.inner.draw_inner(&states, &mut out, is_terminal);
+        }
+        result
     }
 }
 
