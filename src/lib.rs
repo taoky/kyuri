@@ -19,7 +19,7 @@
 //!     bar.set_pos(i);
 //!     std::thread::sleep(std::time::Duration::from_millis(1));
 //! }
-//! bar.finish();
+//! bar.finish_and_drop();
 //! ```
 //!
 //! ## Template
@@ -378,7 +378,7 @@ impl Manager {
     /// If ticker is enabled, unforced draw would be ignored. Otherwise, it would only draw when the interval has passed.
     ///
     /// Progress bars would be drawn by the order of `Bar` creation. In ANSI mode, it would clear the previous output.
-    /// 
+    ///
     /// Finally, when output is not a terminal, bars would be drawn only when it needs to be redrawn.
     pub fn draw(&self, force: bool) {
         self.inner.draw(force);
