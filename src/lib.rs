@@ -43,7 +43,7 @@ use std::{
     collections::BTreeMap,
     sync::{
         atomic::{AtomicBool, AtomicUsize},
-        Arc, Mutex,
+        Arc, Mutex, Weak,
     },
 };
 
@@ -169,8 +169,7 @@ impl BarState {
 /// A handle for users to control a progress bar created by `Manager`.
 pub struct Bar {
     id: usize,
-    state: Arc<Mutex<BarState>>,
-    manager: Arc<ManagerInner>,
+    manager: Weak<ManagerInner>,
 }
 
 pub(crate) struct ManagerInner {
@@ -275,7 +274,9 @@ pub trait Out: std::io::Write + std::io::IsTerminal + Send + Sync {}
 impl<T: std::io::Write + std::io::IsTerminal + Send + Sync> Out for T {}
 
 /// The manager for progress bars. It's expected for users to create a `Manager`, create progress bars from it,
-/// and drop it (and all `Bar`s) when all work has been done.
+/// and drop it when all work has been done.
+/// 
+/// When manager is dropped, it would force a draw. After that bars would not be able to be interacted with.
 pub struct Manager {
     inner: Arc<ManagerInner>,
 }
@@ -386,9 +387,8 @@ impl Manager {
         }
 
         Bar {
-            manager: self.inner.clone(),
+            manager: Arc::downgrade(&self.inner),
             id,
-            state: bar_state,
         }
     }
 
@@ -433,53 +433,83 @@ impl Drop for ManagerInner {
 }
 
 impl Bar {
+    fn get_manager_and_state(&self) -> Option<(Arc<ManagerInner>, Arc<Mutex<BarState>>)> {
+        let manager = self.manager.upgrade()?;
+        let state = manager.states.lock().unwrap().get(&self.id)?.clone();
+        Some((manager, state))
+    }
+
     /// Increment the progress bar by `n`. This makes an unforced draw.
     pub fn inc(&self, n: u64) {
-        let mut state = self.state.lock().unwrap();
-        state.pos += n;
-        state.need_redraw = true;
-        // Drop state before drawing, deadlock otherwise!
-        std::mem::drop(state);
-        self.manager.mark_redraw();
-        self.manager.draw(false);
+        if let Some((manager, state)) = self.get_manager_and_state() {
+            let mut state = state.lock().unwrap();
+            state.pos += n;
+            state.need_redraw = true;
+            // Drop state before drawing, deadlock otherwise!
+            std::mem::drop(state);
+            manager.mark_redraw();
+            manager.draw(false);
+        }
     }
 
     /// Set the position of the progress bar. This makes an unforced draw.
     pub fn set_pos(&self, pos: u64) {
-        let mut state = self.state.lock().unwrap();
-        state.pos = pos;
-        state.need_redraw = true;
-        std::mem::drop(state);
-        self.manager.mark_redraw();
-        self.manager.draw(false);
+        if let Some((manager, state)) = self.get_manager_and_state() {
+            let mut state = state.lock().unwrap();
+            state.pos = pos;
+            state.need_redraw = true;
+            // Drop state before drawing, deadlock otherwise!
+            std::mem::drop(state);
+            manager.mark_redraw();
+            manager.draw(false);
+        }
     }
 
     /// Set the total length of the progress bar. This makes an unforced draw.
     pub fn set_len(&self, len: u64) {
-        let mut state = self.state.lock().unwrap();
-        state.len = len;
-        state.need_redraw = true;
-        std::mem::drop(state);
-        self.manager.mark_redraw();
-        self.manager.draw(false);
+        if let Some((manager, state)) = self.get_manager_and_state() {
+            let mut state = state.lock().unwrap();
+            state.len = len;
+            state.need_redraw = true;
+            // Drop state before drawing, deadlock otherwise!
+            std::mem::drop(state);
+            manager.mark_redraw();
+            manager.draw(false);
+        }
     }
 
     /// Get the position of the progress bar.
+    ///
+    /// When manager is dropped, this would return 0
     pub fn get_pos(&self) -> u64 {
-        self.state.lock().unwrap().pos
+        self.get_manager_and_state()
+            .map_or(0, |(_, state)| state.lock().unwrap().pos)
     }
 
     /// Get the total length of the progress bar.
+    ///
+    /// When manager is dropped, this would return 0
     pub fn get_len(&self) -> u64 {
-        self.state.lock().unwrap().len
+        self.get_manager_and_state()
+            .map_or(0, |(_, state)| state.lock().unwrap().len)
     }
 
     /// Set the progress bar to the end, and force a draw.
     pub fn finish(&self) {
-        if self.get_pos() != self.get_len() {
-            self.set_pos(self.get_len());
+        // if self.get_pos() != self.get_len() {
+        //     self.set_pos(self.get_len());
+        // }
+        // self.manager.draw(true);
+        if let Some((manager, state)) = self.get_manager_and_state() {
+            let state = state.lock().unwrap();
+            let pos = state.pos;
+            let len = state.len;
+            if pos != len {
+                self.set_pos(len);
+            }
+            std::mem::drop(state);
+            manager.draw(true);
         }
-        self.manager.draw(true);
     }
 
     /// Set the progress bar to the end, force a draw, and remove the progress bar from the manager.
@@ -490,48 +520,69 @@ impl Bar {
 
     /// Set the visibility of the progress bar. This makes an forced draw when visible actually changes.
     pub fn set_visible(&self, visible: bool) {
-        let mut state = self.state.lock().unwrap();
-        if state.visible != visible {
-            state.visible = visible;
-            state.need_redraw = true;
-            std::mem::drop(state);
-            self.manager.mark_redraw();
-            self.manager.draw(true);
+        if let Some((manager, state)) = self.get_manager_and_state() {
+            let mut state = state.lock().unwrap();
+            if state.visible != visible {
+                state.visible = visible;
+                state.need_redraw = true;
+                // Drop state before drawing, deadlock otherwise!
+                std::mem::drop(state);
+                manager.mark_redraw();
+                manager.draw(true);
+            }
         }
     }
 
     /// Get the visibility of the progress bar.
+    ///
+    /// When manager is dropped, this would return false
     pub fn is_visible(&self) -> bool {
-        self.state.lock().unwrap().visible
+        self.get_manager_and_state()
+            .map_or(false, |(_, state)| state.lock().unwrap().visible)
     }
 
     /// Set the message of the progress bar. This makes an unforced draw.
     pub fn set_message(&self, message: &str) {
-        let mut state = self.state.lock().unwrap();
-        state.message = message.to_string();
-        state.need_redraw = true;
-        std::mem::drop(state);
-        self.manager.mark_redraw();
-        self.manager.draw(false);
+        if let Some((manager, state)) = self.get_manager_and_state() {
+            let mut state = state.lock().unwrap();
+            state.message = message.to_string();
+            state.need_redraw = true;
+            // Drop state before drawing, deadlock otherwise!
+            std::mem::drop(state);
+            manager.mark_redraw();
+            manager.draw(false);
+        }
     }
 
     /// Set the template of the progress bar. This makes an unforced draw.
     pub fn set_template(&self, template: &str) {
-        let mut state = self.state.lock().unwrap();
-        state.template = Template::new(template);
-        state.need_redraw = true;
-        std::mem::drop(state);
-        self.manager.mark_redraw();
-        self.manager.draw(false);
+        if let Some((manager, state)) = self.get_manager_and_state() {
+            let mut state = state.lock().unwrap();
+            state.template = Template::new(template);
+            state.need_redraw = true;
+            // Drop state before drawing, deadlock otherwise!
+            std::mem::drop(state);
+            manager.mark_redraw();
+            manager.draw(false);
+        }
+    }
+
+    /// Return whether the progress bar (the manager) is still alive.
+    /// 
+    /// When the manager is dropped, the progress bar would not be able to be interacted with.
+    pub fn alive(&self) -> bool {
+        self.get_manager_and_state().is_some()
     }
 }
 
 impl Drop for Bar {
     /// Drop the progress bar. This removes the progress bar from the manager and forces a draw.
     fn drop(&mut self) {
-        self.manager.states.lock().unwrap().remove(&self.id);
-        self.manager.mark_redraw();
-        self.manager.draw(true);
+        if let Some((manager, _)) = self.get_manager_and_state() {
+            manager.states.lock().unwrap().remove(&self.id);
+            manager.mark_redraw();
+            manager.draw(true);
+        }
     }
 }
 
@@ -630,6 +681,22 @@ mod tests {
 
         std::thread::sleep(std::time::Duration::from_secs(2));
         std::mem::drop(bar);
+    }
+
+    #[test]
+    fn alive() {
+        let manager = Manager::new(std::time::Duration::from_secs(1));
+        let bar = manager.create_bar(
+            100,
+            "Downloading",
+            "{msg}\n[{elapsed}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})",
+            true,
+        );
+
+        assert_eq!(bar.alive(), true);
+
+        std::mem::drop(manager);
+        assert_eq!(bar.alive(), false);
     }
 
     #[test]
