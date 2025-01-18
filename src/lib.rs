@@ -377,7 +377,9 @@ impl Manager {
     ///
     /// If ticker is enabled, unforced draw would be ignored. Otherwise, it would only draw when the interval has passed.
     ///
-    /// Progress bars would be drawed by the order of `Bar` creation. In ANSI mode, it would clear the previous output.
+    /// Progress bars would be drawn by the order of `Bar` creation. In ANSI mode, it would clear the previous output.
+    /// 
+    /// Finally, when output is not a terminal, bars would be drawn only when it needs to be redrawn.
     pub fn draw(&self, force: bool) {
         self.inner.draw(force);
     }
@@ -604,8 +606,6 @@ mod tests {
         assert_eq!(
             output,
             r#"Downloading http://d1.example.com/
-0 B/10 B
-Downloading http://d1.example.com/
 0 B/10 B
 Downloading http://d2.example.com/
 0 B/10 B
