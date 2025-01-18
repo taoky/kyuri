@@ -20,7 +20,7 @@ If you need a progress bar or spinner with rich and fancy features, use [indicat
 
 - [Simple example](examples/progress.rs)
 
-    ![progress](assets/progress.gif)
+    <img src="https://github.com/taoky/kyuri/blob/master/assets/progress.gif?raw=true" alt="progress">
 
     ```shell
     cargo run --example progress
@@ -29,7 +29,7 @@ If you need a progress bar or spinner with rich and fancy features, use [indicat
 
 - 2 threads example ([thread](examples/thread.rs), [download](examples/download.rs))
 
-    ![progress](assets/thread.gif)
+    <img src="https://github.com/taoky/kyuri/blob/master/assets/thread.gif?raw=true" alt="thread">
 
     ```shell
     cargo run --example thread
@@ -38,7 +38,7 @@ If you need a progress bar or spinner with rich and fancy features, use [indicat
 
     or this with a different pattern:
 
-    ![download](assets/download.gif)
+    <img src="https://github.com/taoky/kyuri/blob/master/assets/download.gif?raw=true" alt="download">
 
     ```shell
     cargo run --example download
@@ -47,7 +47,7 @@ If you need a progress bar or spinner with rich and fancy features, use [indicat
 
 - Progress bar example
 
-    ![bar](assets/bar.gif)
+    <img src="https://github.com/taoky/kyuri/blob/master/assets/bar.gif?raw=true" alt="bar">
 
     ```shell
     cargo run --example bar
@@ -56,7 +56,7 @@ If you need a progress bar or spinner with rich and fancy features, use [indicat
 
 - `tracing` integration example
 
-    ![bar](assets/tracing.gif)
+    <img src="https://github.com/taoky/kyuri/blob/master/assets/tracing.gif?raw=true" alt="tracing">
 
     ```shell
     cargo run --example tracing
@@ -65,6 +65,6 @@ If you need a progress bar or spinner with rich and fancy features, use [indicat
 
 ---
 
-![cucumber](assets/cucumber.jpg)
+<img src="https://github.com/taoky/kyuri/blob/master/assets/cucumber.jpg?raw=true" alt="Cucumber from Mutsumi">
 
 (Taken from *[BanG Dream! It's MyGO!!!!!](https://en.wikipedia.org/wiki/MyGO!!!!!)* episode 6.)

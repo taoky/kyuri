@@ -1,12 +1,17 @@
 [package]
 name = "kyuri"
-version = "0.1.8"
+version = "0.2.0"
 edition = "2021"
 description = "A very simple progress display library"
 license = "MIT"
 repository = "https://github.com/taoky/kyuri"
 documentation = "https://docs.rs/kyuri"
 readme = "README.md"
+exclude = ["assets/*"]
+categories = ["command-line-interface"]
+keywords = ["progress", "progressbar", "cli"]
+# IsTerminal trait requires 1.70
+rust-version = "1.70"
 
 [dependencies]
 
