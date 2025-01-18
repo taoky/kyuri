@@ -170,7 +170,7 @@ impl BarState {
 pub struct Bar {
     id: usize,
     state: Arc<Mutex<BarState>>,
-    manager: Manager,
+    manager: Arc<ManagerInner>,
 }
 
 pub(crate) struct ManagerInner {
@@ -235,6 +235,11 @@ impl ManagerInner {
         }
     }
 
+    pub(crate) fn mark_redraw(&self) {
+        self.need_redraw
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
     pub(crate) fn draw(&self, force: bool) {
         if !force && self.is_ticker_enabled() {
             return;
@@ -271,7 +276,6 @@ impl<T: std::io::Write + std::io::IsTerminal + Send + Sync> Out for T {}
 
 /// The manager for progress bars. It's expected for users to create a `Manager`, create progress bars from it,
 /// and drop it (and all `Bar`s) when all work has been done.
-#[derive(Clone)]
 pub struct Manager {
     inner: Arc<ManagerInner>,
 }
@@ -297,44 +301,42 @@ impl Manager {
     }
 
     fn mark_redraw(&self) {
-        self.inner
-            .need_redraw
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+        self.inner.mark_redraw();
     }
 
     /// Set the `Manager` to write to stdout.
-    pub fn with_stdout(&self) -> Self {
+    pub fn with_stdout(self) -> Self {
         *self.inner.out.lock().unwrap() = Box::new(std::io::stdout());
         self.mark_redraw();
-        self.clone()
+        self
     }
 
     /// Set the `Manager` to write to stderr.
-    pub fn with_stderr(&self) -> Self {
+    pub fn with_stderr(self) -> Self {
         *self.inner.out.lock().unwrap() = Box::new(std::io::stderr());
         self.mark_redraw();
-        self.clone()
+        self
     }
 
     /// Set the `Manager` to write to a file.
-    pub fn with_file(&self, file: std::fs::File) -> Self {
+    pub fn with_file(self, file: std::fs::File) -> Self {
         *self.inner.out.lock().unwrap() = Box::new(file);
         self.mark_redraw();
-        self.clone()
+        self
     }
 
     /// Let `Manager` automatically detect whether it's writing to a terminal and use ANSI or not.
-    pub fn auto_ansi(&self) -> Self {
+    pub fn auto_ansi(self) -> Self {
         *self.inner.ansi.lock().unwrap() = None;
         self.mark_redraw();
-        self.clone()
+        self
     }
 
     /// Force `Manager` to use ANSI escape codes or not.
-    pub fn force_ansi(&self, force: bool) -> Self {
+    pub fn force_ansi(self, force: bool) -> Self {
         *self.inner.ansi.lock().unwrap() = Some(force);
         self.mark_redraw();
-        self.clone()
+        self
     }
 
     /// Ticker enables a background thread to draw progress bars at a fixed interval.
@@ -384,7 +386,7 @@ impl Manager {
         }
 
         Bar {
-            manager: self.clone(),
+            manager: self.inner.clone(),
             id,
             state: bar_state,
         }
@@ -423,8 +425,8 @@ impl Manager {
     }
 }
 
-impl Drop for Manager {
-    /// Force a draw when the `Manager` is dropped.
+impl Drop for ManagerInner {
+    /// Force a draw when the `ManagerInner` is dropped.
     fn drop(&mut self) {
         self.draw(true);
     }
@@ -527,7 +529,7 @@ impl Bar {
 impl Drop for Bar {
     /// Drop the progress bar. This removes the progress bar from the manager and forces a draw.
     fn drop(&mut self) {
-        self.manager.inner.states.lock().unwrap().remove(&self.id);
+        self.manager.states.lock().unwrap().remove(&self.id);
         self.manager.mark_redraw();
         self.manager.draw(true);
     }
