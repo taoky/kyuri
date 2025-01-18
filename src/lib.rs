@@ -49,6 +49,7 @@ use std::{
 
 mod template;
 mod ticker;
+mod writer;
 use template::{Template, TemplatePart};
 use ticker::Ticker;
 
@@ -176,7 +177,7 @@ pub(crate) struct ManagerInner {
     states: Mutex<BTreeMap<usize, Arc<Mutex<BarState>>>>,
     ansi: Mutex<Option<bool>>,
     interval: std::time::Duration,
-    out: Mutex<Box<dyn Out>>,
+    pub(crate) out: Arc<Mutex<Box<dyn Out>>>,
     ticker: Mutex<Option<Ticker>>,
 
     // interval states
@@ -267,6 +268,20 @@ impl ManagerInner {
 
         *last_draw = now;
     }
+
+    pub(crate) fn suspend<F: FnOnce(&mut Box<dyn Out>) -> R, R>(&self, f: F) -> R {
+        let mut out = self.out.lock().unwrap();
+        let is_terminal = self.is_terminal(&mut out);
+        if is_terminal {
+            self.clear_existing(&mut out);
+        }
+        let result = f(&mut out);
+        if is_terminal {
+            let states = self.states.lock().unwrap();
+            self.draw_inner(&states, &mut out, is_terminal);
+        }
+        result
+    }
 }
 
 /// Trait for progress output streams. `std::io::stdout`, `std::io::stderr` and `std::fs::File` implement this trait.
@@ -275,7 +290,7 @@ impl<T: std::io::Write + std::io::IsTerminal + Send + Sync> Out for T {}
 
 /// The manager for progress bars. It's expected for users to create a `Manager`, create progress bars from it,
 /// and drop it when all work has been done.
-/// 
+///
 /// When manager is dropped, it would force a draw. After that bars would not be able to be interacted with.
 pub struct Manager {
     inner: Arc<ManagerInner>,
@@ -291,7 +306,7 @@ impl Manager {
                 states: Mutex::new(BTreeMap::new()),
                 next_id: AtomicUsize::new(0),
                 interval,
-                out: Mutex::new(Box::new(std::io::stdout())),
+                out: Arc::new(Mutex::new(Box::new(std::io::stdout()))),
                 last_draw: Mutex::new(std::time::Instant::now() - interval),
                 last_lines: AtomicUsize::new(0),
                 ansi: Mutex::new(None),
@@ -410,18 +425,13 @@ impl Manager {
     /// This method is used for implementing integrations with other libraries that may print to the terminal.
     ///
     /// When output is not a terminal, the closure would still be run but nothing would be done to the progress bars.
-    pub fn suspend<F: FnOnce() -> R, R>(&self, f: F) -> R {
-        let mut out = self.inner.out.lock().unwrap();
-        let is_terminal = self.inner.is_terminal(&mut out);
-        if is_terminal {
-            self.inner.clear_existing(&mut out);
-        }
-        let result = f();
-        if is_terminal {
-            let states = self.inner.states.lock().unwrap();
-            self.inner.draw_inner(&states, &mut out, is_terminal);
-        }
-        result
+    pub fn suspend<F: FnOnce(&mut Box<dyn Out>) -> R, R>(&self, f: F) -> R {
+        self.inner.suspend(f)
+    }
+
+    /// Create a writer for integration with other libraries.
+    pub fn create_writer(&self) -> writer::KyuriWriter {
+        writer::KyuriWriter::new(self.inner.clone())
     }
 }
 
@@ -568,7 +578,7 @@ impl Bar {
     }
 
     /// Return whether the progress bar (the manager) is still alive.
-    /// 
+    ///
     /// When the manager is dropped, the progress bar would not be able to be interacted with.
     pub fn alive(&self) -> bool {
         self.get_manager_and_state().is_some()
