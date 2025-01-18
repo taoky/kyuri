@@ -4,6 +4,8 @@ A progress display library specifically designed for my mirroring softwares (tsu
 
 Uses some code from [indicatif](https://github.com/console-rs/indicatif) (MIT).
 
+Docs: [docs.rs/kyuri](https://docs.rs/kyuri)
+
 ## Why?
 
 It could output a progress indicator both when printing to terminal and (especially when) writing to file, with minimal distraction.
