@@ -174,6 +174,10 @@ pub struct Bar {
     manager: Weak<ManagerInner>,
 }
 
+/// Lock order:
+/// - last_draw
+/// - out
+/// - states
 pub(crate) struct ManagerInner {
     states: Mutex<BTreeMap<usize, Arc<Mutex<BarState>>>>,
     ansi: Mutex<Option<bool>>,
@@ -257,8 +261,8 @@ impl ManagerInner {
         {
             return;
         }
-        let states = self.states.lock().unwrap();
         let mut out = self.out.lock().unwrap();
+        let states = self.states.lock().unwrap();
         let is_terminal = self.is_terminal(&mut out);
         if is_terminal && states.len() > 0 {
             // Don't clean output when no bars are present
