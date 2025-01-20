@@ -50,7 +50,7 @@ use std::{
 
 mod template;
 mod ticker;
-mod writer;
+pub mod writer;
 use template::{Template, TemplatePart};
 use ticker::Ticker;
 
