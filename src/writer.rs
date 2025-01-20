@@ -36,4 +36,28 @@ impl std::io::Write for KyuriWriter {
             self.out.lock().unwrap().flush()
         }
     }
+
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
+        if let Some(manager) = self.manager.upgrade() {
+            manager.suspend(|out| out.write_vectored(bufs))
+        } else {
+            self.out.lock().unwrap().write_vectored(bufs)
+        }
+    }
+
+    fn write_all(&mut self, buf: &[u8]) -> std::io::Result<()> {
+        if let Some(manager) = self.manager.upgrade() {
+            manager.suspend(|out| out.write_all(buf))
+        } else {
+            self.out.lock().unwrap().write_all(buf)
+        }
+    }
+
+    fn write_fmt(&mut self, fmt: std::fmt::Arguments<'_>) -> std::io::Result<()> {
+        if let Some(manager) = self.manager.upgrade() {
+            manager.suspend(|out| out.write_fmt(fmt))
+        } else {
+            self.out.lock().unwrap().write_fmt(fmt)
+        }
+    }
 }
