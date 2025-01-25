@@ -757,7 +757,7 @@ mod tests {
         assert_eq!(bar.alive(), false);
     }
 
-    #[cfg(unix)]
+    #[cfg(target_os = "linux")]
     #[test]
     fn test_pb_to_file() {
         const TEMPLATE_SIMPLE: &str = "{msg}\n{bytes}/{total_bytes}";
