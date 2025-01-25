@@ -1,7 +1,8 @@
 //! A simple progress display library.
 //!
 //! Kyuri is a simple progress display library. Different from [indicatif](https://github.com/console-rs/indicatif), it:
-//! - Depends on std only.
+//! - Depends on std only when terminal support is unnecessary.
+//!   - Custom features `console_width` and `unicode` are available for ANSI mode terminal width detection and Unicode width calculation.
 //! - The `Manager` (like `MultiProgress` in indicatif) manages all progress bar management and rendering.
 //! - Friendly to writing to files.
 //! - Predictable about when it would draw.
@@ -52,7 +53,9 @@ mod template;
 mod ticker;
 pub mod writer;
 use template::{Template, TemplatePart};
+use termsize::get_width;
 use ticker::Ticker;
+mod termsize;
 
 const CLEAR_ANSI: &str = "\r\x1b[K";
 const UP_ANSI: &str = "\x1b[F";
@@ -92,6 +95,18 @@ fn bytes_to_human(bytes: u64) -> String {
         format!("{:.2} GiB", bytes as f64 / GB as f64)
     } else {
         format!("{:.2} TiB", bytes as f64 / TB as f64)
+    }
+}
+
+fn string_width(s: &str) -> usize {
+    #[cfg(feature = "unicode")]
+    {
+        unicode_width::UnicodeWidthStr::width(s)
+    }
+
+    #[cfg(not(feature = "unicode"))]
+    {
+        s.chars().count()
     }
 }
 
@@ -229,7 +244,15 @@ impl ManagerInner {
             }
             let outstr = format!("{}\n", state.render());
             if is_terminal {
-                newlines += outstr.chars().filter(|&c| c == '\n').count();
+                let splits = outstr.split('\n');
+                let term_col = get_width(out.as_ref()) as usize;
+                for i in splits {
+                    let width = string_width(i);
+                    newlines += width / term_col;
+                    if width % term_col != 0 {
+                        newlines += 1;
+                    }
+                }
             }
             let _ = out.write_all(outstr.as_bytes());
             state.need_redraw = false;
@@ -290,7 +313,31 @@ impl ManagerInner {
 }
 
 /// Trait for progress output streams. `std::io::stdout`, `std::io::stderr` and `std::fs::File` implement this trait.
+#[cfg(all(unix, feature = "console_width"))]
+pub trait Out: std::io::Write + std::io::IsTerminal + std::os::fd::AsRawFd + Send + Sync {}
+#[cfg(all(unix, feature = "console_width"))]
+impl<T: std::io::Write + std::io::IsTerminal + std::os::fd::AsRawFd + Send + Sync> Out for T {}
+
+#[cfg(all(windows, feature = "console_width"))]
+pub trait Out:
+    std::io::Write + std::io::IsTerminal + std::os::windows::io::AsRawHandle + Send + Sync
+{
+}
+#[cfg(all(windows, feature = "console_width"))]
+impl<T: std::io::Write + std::io::IsTerminal + std::os::windows::io::AsRawHandle + Send + Sync> Out
+    for T
+{
+}
+
+#[cfg(not(any(
+    all(windows, feature = "console_width"),
+    all(unix, feature = "console_width")
+)))]
 pub trait Out: std::io::Write + std::io::IsTerminal + Send + Sync {}
+#[cfg(not(any(
+    all(windows, feature = "console_width"),
+    all(unix, feature = "console_width")
+)))]
 impl<T: std::io::Write + std::io::IsTerminal + Send + Sync> Out for T {}
 
 /// The manager for progress bars. It's expected for users to create a `Manager`, create progress bars from it,
@@ -710,6 +757,7 @@ mod tests {
         assert_eq!(bar.alive(), false);
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_pb_to_file() {
         const TEMPLATE_SIMPLE: &str = "{msg}\n{bytes}/{total_bytes}";

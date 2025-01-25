@@ -12,7 +12,11 @@ The API is not stable yet.
 
 It could output a progress indicator both when printing to terminal and (especially when) writing to file, with minimal distraction.
 
-And no other dependencies.
+And no other dependencies when terminal support is unnecessary. Custom features:
+
+- `console_width` feature: auto-detect terminal width. Otherwise, it's fixed at 80 when in ANSI mode.
+- `unicode` feature: calculate the width of Unicode characters correctly. Unnecessary when not in ANSI mode.
+- `full`: `console_width` + `unicode`.
 
 If you need a progress bar or spinner with rich and fancy features, use [indicatif](https://github.com/console-rs/indicatif) instead.
 

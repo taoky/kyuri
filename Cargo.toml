@@ -14,9 +14,23 @@ keywords = ["progress", "progressbar", "cli"]
 rust-version = "1.70"
 
 [dependencies]
+unicode-width = { version = "0.2.0", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", optional = true }
+
+[target.'cfg(unix)'.dev-dependencies]
+nix = { version = "0.29.0", features = ["fs"] }
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["handleapi", "fileapi", "wincon"], optional = true }
 
 [dev-dependencies]
-nix = { version = "0.29.0", features = ["fs"] }
 rand = "0.8"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+
+[features]
+console_width = ["libc", "winapi"]
+unicode = ["unicode-width"]
+full = ["console_width", "unicode"]
