@@ -13,9 +13,6 @@ fn main() {
         bar_1.set_visible(true);
         for i in 0..=100 {
             bar_1.set_pos(i);
-            if i == 100 {
-                bar_1.finish();
-            }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
         bar_1.set_visible(false);
@@ -26,9 +23,6 @@ fn main() {
         bar_2.set_visible(true);
         for i in 0..=200 {
             bar_2.set_pos(i);
-            if i == 200 {
-                bar_2.finish();
-            }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
         bar_2.set_visible(false);

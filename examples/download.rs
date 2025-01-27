@@ -22,9 +22,6 @@ fn main() {
                 );
                 for i in 0..=size {
                     bar_1.set_pos(i);
-                    if i == size {
-                        bar_1.finish();
-                    }
                     std::thread::sleep(std::time::Duration::from_micros(interval_micros));
                 }
                 cnt += 1;

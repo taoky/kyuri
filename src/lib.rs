@@ -214,6 +214,7 @@ pub(crate) struct ManagerInner {
     interval: std::time::Duration,
     pub(crate) out: Arc<Mutex<Box<dyn Out>>>,
     ticker: Mutex<Option<Ticker>>,
+    force_when_finished: AtomicBool,
 
     // interval states
     next_id: AtomicUsize,
@@ -384,6 +385,7 @@ impl Manager {
                 ansi: Mutex::new(None),
                 need_redraw: AtomicBool::new(false),
                 ticker: Mutex::new(None),
+                force_when_finished: AtomicBool::new(true),
             }),
         }
     }
@@ -437,6 +439,15 @@ impl Manager {
         } else if !set_ticker && ticker.is_some() {
             *ticker = None;
         }
+    }
+
+    /// If manager shall forcely draw when pos == len without explicitly calling finish().
+    ///
+    /// Default is true.
+    pub fn force_draw_when_finished(&self, force: bool) {
+        self.inner
+            .force_when_finished
+            .store(force, std::sync::atomic::Ordering::Release);
     }
 
     /// Create a new progress bar.
@@ -540,10 +551,19 @@ impl Bar {
             let mut state = state.lock().unwrap();
             state.pos = pos;
             state.need_redraw = true;
+            let len = state.len;
             // Drop state before drawing, deadlock otherwise!
             std::mem::drop(state);
             manager.mark_redraw();
-            manager.draw(false);
+            if manager
+                .force_when_finished
+                .load(std::sync::atomic::Ordering::Acquire)
+                && pos == len
+            {
+                manager.draw(true);
+            } else {
+                manager.draw(false);
+            }
         }
     }
 
