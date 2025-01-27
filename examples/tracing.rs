@@ -1,7 +1,6 @@
 use std::sync::Mutex;
 
 use tracing::warn;
-use tracing_subscriber;
 
 fn main() {
     let manager = kyuri::Manager::new(std::time::Duration::from_secs(1));

@@ -182,14 +182,14 @@ impl BarState {
                 }
                 TemplatePart::StateEmoji => {
                     if self.pos == self.len {
-                        result.push_str("✅");
+                        result.push('✅');
                     } else if self.pos == 0 {
-                        result.push_str("🆕");
+                        result.push('🆕');
                     } else if self.pos > self.len {
-                        result.push_str("💥");
+                        result.push('💥');
                     } else {
                         // 0 < self.pos < self.len
-                        result.push_str("⏳");
+                        result.push('⏳');
                     }
                 }
             }
@@ -738,10 +738,10 @@ mod tests {
             true,
         );
 
-        assert_eq!(bar.is_visible(), true);
+        assert!(bar.is_visible());
 
         bar.set_visible(false);
-        assert_eq!(bar.is_visible(), false);
+        assert!(!bar.is_visible());
 
         std::mem::drop(bar);
     }
@@ -771,10 +771,10 @@ mod tests {
             true,
         );
 
-        assert_eq!(bar.alive(), true);
+        assert!(bar.alive());
 
         std::mem::drop(manager);
-        assert_eq!(bar.alive(), false);
+        assert!(!bar.alive());
     }
 
     #[cfg(target_os = "linux")]
