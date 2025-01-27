@@ -230,7 +230,7 @@ impl ManagerInner {
 
     /// This is expected to be called only when it's ANSI mode.
     pub(crate) fn clear_existing(&self, out: &mut Box<dyn Out>) {
-        for _ in 0..self.last_lines.load(std::sync::atomic::Ordering::Relaxed) {
+        for _ in 0..self.last_lines.load(std::sync::atomic::Ordering::Acquire) {
             let _ = out.write_all(format!("{}{}", UP_ANSI, CLEAR_ANSI).as_bytes());
         }
     }
@@ -275,13 +275,13 @@ impl ManagerInner {
         }
         if is_terminal {
             self.last_lines
-                .store(newlines, std::sync::atomic::Ordering::Relaxed);
+                .store(newlines, std::sync::atomic::Ordering::Release);
         }
     }
 
     pub(crate) fn mark_redraw(&self) {
         self.need_redraw
-            .store(true, std::sync::atomic::Ordering::Relaxed);
+            .store(true, std::sync::atomic::Ordering::Release);
     }
 
     pub(crate) fn draw(&self, force: bool) {
@@ -296,7 +296,7 @@ impl ManagerInner {
 
         if !self
             .need_redraw
-            .swap(false, std::sync::atomic::Ordering::Relaxed)
+            .swap(false, std::sync::atomic::Ordering::AcqRel)
         {
             return;
         }
