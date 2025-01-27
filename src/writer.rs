@@ -1,3 +1,5 @@
+//! The modules contains `KyuriWriter`, a wrapper used with other libraries.
+
 use std::sync::{Arc, Mutex, Weak};
 
 use crate::{ManagerInner, Out};

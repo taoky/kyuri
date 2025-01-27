@@ -41,6 +41,8 @@
 //!
 //! Doubled `{` and `}` would not be interpreted as tags.
 
+#![warn(missing_docs)]
+
 use std::{
     collections::BTreeMap,
     sync::{
@@ -312,12 +314,15 @@ impl ManagerInner {
     }
 }
 
-/// Trait for progress output streams. `std::io::stdout`, `std::io::stderr` and `std::fs::File` implement this trait.
+/// Trait for progress output streams, requires Unix file descriptor support.
+/// `std::io::stdout`, `std::io::stderr` and `std::fs::File` implement this trait.
 #[cfg(all(unix, feature = "console_width"))]
 pub trait Out: std::io::Write + std::io::IsTerminal + std::os::fd::AsRawFd + Send + Sync {}
 #[cfg(all(unix, feature = "console_width"))]
 impl<T: std::io::Write + std::io::IsTerminal + std::os::fd::AsRawFd + Send + Sync> Out for T {}
 
+/// Trait for progress output streams, requires Windows HANDLE support.
+/// `std::io::stdout`, `std::io::stderr` and `std::fs::File` implement this trait.
 #[cfg(all(windows, feature = "console_width"))]
 pub trait Out:
     std::io::Write + std::io::IsTerminal + std::os::windows::io::AsRawHandle + Send + Sync
@@ -329,6 +334,8 @@ impl<T: std::io::Write + std::io::IsTerminal + std::os::windows::io::AsRawHandle
 {
 }
 
+/// Trait for progress output streams.
+/// `std::io::stdout`, `std::io::stderr` and `std::fs::File` implement this trait.
 #[cfg(not(any(
     all(windows, feature = "console_width"),
     all(unix, feature = "console_width")
