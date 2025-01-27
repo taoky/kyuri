@@ -38,6 +38,7 @@
 //! - `{bytes_per_sec}`, `{bytes_per_second}`: The current speed in bytes per second.
 //! - `{eta}`: The estimated time of arrival (H:MM:SS).
 //! - `{bar}`, `{barNUM}`: The progress bar. The `NUM` is the size of the bar, default is 20.
+//! - `{state_emoji}`: The state emoji of the bar. ✅ for finished, 🆕 for new, 💥 for overflowed, ⏳ for in progress.
 //!
 //! Doubled `{` and `}` would not be interpreted as tags.
 
@@ -177,6 +178,18 @@ impl BarState {
                         for _ in 0..overflowed {
                             result.push('!');
                         }
+                    }
+                }
+                TemplatePart::StateEmoji => {
+                    if self.pos == self.len {
+                        result.push_str("✅");
+                    } else if self.pos == 0 {
+                        result.push_str("🆕");
+                    } else if self.pos > self.len {
+                        result.push_str("💥");
+                    } else {
+                        // 0 < self.pos < self.len
+                        result.push_str("⏳");
                     }
                 }
             }

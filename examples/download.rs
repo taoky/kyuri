@@ -2,7 +2,8 @@ use kyuri::Manager;
 use rand::Rng;
 
 fn main() {
-    const TEMPLATE: &str = "{msg}\n[{elapsed}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})";
+    const TEMPLATE: &str =
+        "{msg}\n[{elapsed}] {state_emoji} {bytes}/{total_bytes} ({bytes_per_sec}, {eta})";
     let manager = Manager::new(std::time::Duration::from_secs(1));
 
     std::thread::scope(|s| {
@@ -19,8 +20,11 @@ fn main() {
                     TEMPLATE,
                     true,
                 );
-                for i in 0..size {
+                for i in 0..=size {
                     bar_1.set_pos(i);
+                    if i == size {
+                        bar_1.finish();
+                    }
                     std::thread::sleep(std::time::Duration::from_micros(interval_micros));
                 }
                 cnt += 1;
@@ -39,8 +43,11 @@ fn main() {
                     TEMPLATE,
                     true,
                 );
-                for i in 0..size {
+                for i in 0..=size {
                     bar_2.set_pos(i);
+                    if i == size {
+                        bar_2.finish();
+                    }
                     std::thread::sleep(std::time::Duration::from_micros(interval_micros));
                 }
                 cnt += 1;

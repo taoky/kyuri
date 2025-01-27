@@ -14,6 +14,7 @@ pub(crate) enum TemplatePart {
     BytesPerSecond,
     /// HH:MM:SS
     Eta,
+    StateEmoji,
     Bar(usize),
     Text(String),
 }
@@ -118,6 +119,7 @@ impl Template {
                         };
                         results.push(TemplatePart::Bar(bar_len));
                     }
+                    "state_emoji" => results.push(TemplatePart::StateEmoji),
                     _ => {
                         push_text(&mut results, &format!("{{{tag}}}"));
                     }
