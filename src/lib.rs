@@ -532,16 +532,29 @@ impl Bar {
         Some((manager, state))
     }
 
+    fn check_if_force_draw(&self, manager: Arc<ManagerInner>, pos: u64, len: u64) {
+        if pos == len && manager
+            .force_when_finished
+            .load(std::sync::atomic::Ordering::Acquire)
+        {
+            manager.draw(true);
+        } else {
+            manager.draw(false);
+        }
+    }
+
     /// Increment the progress bar by `n`. This makes an unforced draw.
     pub fn inc(&self, n: u64) {
         if let Some((manager, state)) = self.get_manager_and_state() {
             let mut state = state.lock().unwrap();
             state.pos += n;
             state.need_redraw = true;
+            let pos = state.pos;
+            let len = state.len;
             // Drop state before drawing, deadlock otherwise!
             std::mem::drop(state);
             manager.mark_redraw();
-            manager.draw(false);
+            self.check_if_force_draw(manager, pos, len);
         }
     }
 
@@ -551,19 +564,12 @@ impl Bar {
             let mut state = state.lock().unwrap();
             state.pos = pos;
             state.need_redraw = true;
+            let pos = state.pos;
             let len = state.len;
             // Drop state before drawing, deadlock otherwise!
             std::mem::drop(state);
             manager.mark_redraw();
-            if manager
-                .force_when_finished
-                .load(std::sync::atomic::Ordering::Acquire)
-                && pos == len
-            {
-                manager.draw(true);
-            } else {
-                manager.draw(false);
-            }
+            self.check_if_force_draw(manager, pos, len);
         }
     }
 
@@ -573,10 +579,12 @@ impl Bar {
             let mut state = state.lock().unwrap();
             state.len = len;
             state.need_redraw = true;
+            let pos = state.pos;
+            let len = state.len;
             // Drop state before drawing, deadlock otherwise!
             std::mem::drop(state);
             manager.mark_redraw();
-            manager.draw(false);
+            self.check_if_force_draw(manager, pos, len);
         }
     }
 
