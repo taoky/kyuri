@@ -1,15 +1,12 @@
 // https://github.com/console-rs/console/blob/f37cb6e7bc575b38bcdc0111457b60ca2d71cdd5/src/windows_term/mod.rs#L109
 
 use super::DEFAULT_WIDTH;
-use winapi::um::handleapi::INVALID_HANDLE_VALUE;
-use winapi::um::wincon::GetConsoleScreenBufferInfo;
-use winapi::um::wincon::CONSOLE_SCREEN_BUFFER_INFO;
-use winapi::um::wincon::SMALL_RECT;
-use winapi::um::wincontypes::COORD;
+use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+use windows_sys::Win32::System::Console::{SMALL_RECT, COORD, CONSOLE_SCREEN_BUFFER_INFO, GetConsoleScreenBufferInfo};
 
 pub(crate) fn get_width<T: std::os::windows::io::AsRawHandle + ?Sized>(f: &T) -> u16 {
     let handle = f.as_raw_handle();
-    let hand = handle as winapi::um::winnt::HANDLE;
+    let hand = handle as windows_sys::Win32::Foundation::HANDLE;
 
     if hand == INVALID_HANDLE_VALUE {
         return DEFAULT_WIDTH;
