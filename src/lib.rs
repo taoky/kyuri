@@ -588,6 +588,23 @@ impl Bar {
         }
     }
 
+    /// Reset the created_at time to now. This makes an unforced draw.
+    /// 
+    /// Remember to call this when you want to reuse a bar object.
+    pub fn reset_created_at(&self) {
+        if let Some((manager, state)) = self.get_manager_and_state() {
+            let mut state = state.lock().unwrap();
+            state.created_at = std::time::Instant::now();
+            state.need_redraw = true;
+            let pos = state.pos;
+            let len = state.len;
+            // Drop state before drawing, deadlock otherwise!
+            std::mem::drop(state);
+            manager.mark_redraw();
+            self.check_if_force_draw(manager, pos, len);
+        }
+    }
+
     /// Get the position of the progress bar.
     ///
     /// When manager is dropped, this would return 0

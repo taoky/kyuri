@@ -11,6 +11,7 @@ fn main() {
         std::thread::sleep(std::time::Duration::from_secs(1));
         bar_1.set_pos(0);
         bar_1.set_visible(true);
+        bar_1.reset_created_at();
         for i in 0..=100 {
             bar_1.set_pos(i);
             std::thread::sleep(std::time::Duration::from_millis(100));
@@ -21,6 +22,7 @@ fn main() {
         std::thread::sleep(std::time::Duration::from_secs(1));
         bar_2.set_pos(0);
         bar_2.set_visible(true);
+        bar_2.reset_created_at();
         for i in 0..=200 {
             bar_2.set_pos(i);
             std::thread::sleep(std::time::Duration::from_millis(100));
